@@ -141,9 +141,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("oast_id required")
 	}

@@ -110,10 +110,10 @@ func checkLineEndings(headers []byte) string {
 }
 
 // validationIssue represents a single validation problem.
-type validationIssue struct { // TODO - move?
-	Check    string `json:"check"`    // TODO - json tags useful?
-	Severity string `json:"severity"` // "error" or "warning"
-	Detail   string `json:"detail"`
+type validationIssue struct {
+	Check    string
+	Severity string // "error" or "warning"
+	Detail   string
 }
 
 // validateRequest checks request for common issues.
@@ -246,7 +246,11 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 		}
 		proxyEntries, err := s.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
 		if err != nil {
-			s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "failed to fetch flow", err.Error())
+			if IsTimeoutError(err) {
+				s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout, "request timed out fetching flow", err.Error())
+			} else {
+				s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "failed to fetch flow", err.Error())
+			}
 			return
 		} else if len(proxyEntries) == 0 {
 			s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "flow not found in proxy history", "")
@@ -354,7 +358,11 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.httpBackend.SendRequest(ctx, "sectool-"+replayID, sendInput)
 	if err != nil {
-		s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "request failed", err.Error())
+		if IsTimeoutError(err) {
+			s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout, "request timed out", err.Error())
+		} else {
+			s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "request failed", err.Error())
+		}
 		return
 	}
 

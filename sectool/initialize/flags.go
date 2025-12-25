@@ -40,13 +40,9 @@ Options:
 	if mode == "" {
 		fs.Usage()
 		return errors.New("mode required: test-report or explore")
-	}
-
-	if err := fs.Parse(flagArgs); err != nil {
+	} else if err := fs.Parse(flagArgs); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) > 0 {
+	} else if len(fs.Args()) > 0 {
 		return fmt.Errorf("unknown init mode: %s (expected test-report or explore)", fs.Args()[0])
 	}
 

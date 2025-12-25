@@ -91,7 +91,7 @@ Options:
 		return err
 	}
 
-	sources := 0
+	var sources int
 	if flow != "" {
 		sources++
 	}
@@ -104,8 +104,7 @@ Options:
 	if sources == 0 {
 		fs.Usage()
 		return errors.New("one of --flow, --bundle, or --file is required")
-	}
-	if sources > 1 {
+	} else if sources > 1 {
 		return errors.New("only one of --flow, --bundle, or --file can be specified")
 	}
 
@@ -130,9 +129,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("replay_id required")
 	}

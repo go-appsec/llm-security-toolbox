@@ -110,9 +110,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("flow_id required")
 	}
@@ -138,9 +136,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("state required: on or off")
 	}
@@ -257,9 +253,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("rule_id required")
 	}

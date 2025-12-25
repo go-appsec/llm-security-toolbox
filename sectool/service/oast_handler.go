@@ -10,8 +10,13 @@ import (
 func (s *Server) handleOastCreate(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.oastBackend.CreateSession(r.Context())
 	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError,
-			"failed to create OAST session", err.Error())
+		if IsTimeoutError(err) {
+			s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
+				"OAST session creation timed out", err.Error())
+		} else {
+			s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError,
+				"failed to create OAST session", err.Error())
+		}
 		return
 	}
 
@@ -79,8 +84,13 @@ func (s *Server) handleOastPoll(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOastList(w http.ResponseWriter, r *http.Request) {
 	sessions, err := s.oastBackend.ListSessions(r.Context())
 	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError,
-			"failed to list OAST sessions", err.Error())
+		if IsTimeoutError(err) {
+			s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
+				"OAST session list timed out", err.Error())
+		} else {
+			s.writeError(w, http.StatusInternalServerError, ErrCodeBackendError,
+				"failed to list OAST sessions", err.Error())
+		}
 		return
 	}
 

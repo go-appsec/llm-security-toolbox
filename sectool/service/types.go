@@ -1,8 +1,12 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
+	"os"
 	"path/filepath"
 )
 
@@ -55,16 +59,31 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
-// Common error codes
 const (
-	ErrCodeServiceUnavailable = "SERVICE_UNAVAILABLE"
-	ErrCodeBackendError       = "BACKEND_ERROR"
-	ErrCodeInvalidRequest     = "INVALID_REQUEST"
-	ErrCodeNotFound           = "NOT_FOUND"
-	ErrCodeInternal           = "INTERNAL_ERROR"
-	ErrCodeTimeout            = "TIMEOUT"
-	ErrCodeValidation         = "VALIDATION_ERROR"
+	ErrCodeBackendError   = "BACKEND_ERROR"
+	ErrCodeInvalidRequest = "INVALID_REQUEST"
+	ErrCodeNotFound       = "NOT_FOUND"
+	ErrCodeInternal       = "INTERNAL_ERROR"
+	ErrCodeTimeout        = "TIMEOUT"
+	ErrCodeValidation     = "VALIDATION_ERROR"
 )
+
+// IsTimeoutError returns true if the error is a timeout (context deadline exceeded,
+// network timeout, etc). Used to distinguish timeout errors from other backend errors.
+func IsTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	} else if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
 
 func NewAPIError(code, message, hint string) *APIError {
 	return &APIError{
@@ -87,10 +106,10 @@ type HealthMetricProvider func() string
 
 // ServiceStatus represents the service status for CLI display.
 type ServiceStatus struct {
-	Running    bool            `json:"running"`
-	PID        int             `json:"pid,omitempty"`
-	Health     *HealthResponse `json:"health,omitempty"`
-	SocketPath string          `json:"socket_path"`
+	Running    bool
+	PID        int
+	Health     *HealthResponse
+	SocketPath string
 }
 
 // StopResponse is returned by POST /srv/stop.
@@ -164,7 +183,6 @@ type AggregateEntry struct {
 // FlowSummary represents a single proxy history entry in list view.
 type FlowSummary struct {
 	FlowID         string `json:"flow_id"`
-	Timestamp      string `json:"timestamp"`
 	Method         string `json:"method"`
 	Scheme         string `json:"scheme"`
 	Host           string `json:"host"`

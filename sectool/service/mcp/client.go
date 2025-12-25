@@ -23,7 +23,7 @@ const (
 	ClientName = "sectool"
 
 	// ProtocolVersion is the MCP protocol version we support.
-	ProtocolVersion = "2024-11-05" // TODO - necessary?
+	ProtocolVersion = "2024-11-05"
 
 	// DefaultConnectTimeout is the timeout for initial connection.
 	DefaultConnectTimeout = 30 * time.Second
@@ -271,7 +271,7 @@ func fixInvalidUnicodeEscapes(s string) string {
 	var result strings.Builder
 	result.Grow(len(s))
 
-	i := 0
+	var i int
 	for i < len(s) {
 		if s[i] == '\\' && i+1 < len(s) {
 			next := s[i+1]

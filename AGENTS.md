@@ -24,8 +24,7 @@ make lint           # Run golangci-lint and go vet
 
 ```
 sectool/
-├── main.go              # Entry point; routes --service flag to daemon mode, else CLI
-├── flags.go             # Root command parsing and dispatch
+├── main.go              # Entry point; routes --service flag to daemon mode, else CLI command parsing and dispatch
 ├── config/              # Configuration management
 │   ├── config.go        # Config loading/saving, defaults
 │   └── config_test.go

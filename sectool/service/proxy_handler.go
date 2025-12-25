@@ -206,8 +206,13 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 			proxyEntries, fetchErr = s.httpBackend.GetProxyHistory(ctx, fetchBatchSize, offset)
 		}
 		if fetchErr != nil {
-			s.writeError(w, http.StatusBadGateway, ErrCodeBackendError,
-				"failed to fetch proxy history", fetchErr.Error())
+			if IsTimeoutError(fetchErr) {
+				s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
+					"proxy history request timed out", fetchErr.Error())
+			} else {
+				s.writeError(w, http.StatusBadGateway, ErrCodeBackendError,
+					"failed to fetch proxy history", fetchErr.Error())
+			}
 			return
 		}
 
@@ -369,8 +374,13 @@ func (s *Server) handleProxyExport(w http.ResponseWriter, r *http.Request) {
 
 	proxyEntries, err := s.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
 	if err != nil {
-		s.writeError(w, http.StatusBadGateway, ErrCodeBackendError,
-			"failed to fetch flow from HttpBackend", err.Error())
+		if IsTimeoutError(err) {
+			s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
+				"request timed out fetching flow", err.Error())
+		} else {
+			s.writeError(w, http.StatusBadGateway, ErrCodeBackendError,
+				"failed to fetch flow from HttpBackend", err.Error())
+		}
 		return
 	} else if len(proxyEntries) == 0 {
 		s.writeError(w, http.StatusNotFound, ErrCodeNotFound,

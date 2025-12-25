@@ -402,7 +402,7 @@ func (s *Server) burpMCPURL() string {
 
 // connectBurpMCP establishes the connection to Burp MCP.
 func (s *Server) connectBurpMCP(ctx context.Context) error {
-	// TODO - replace this with a HttpBackend selection
+	// TODO - FUTURE - replace this with a HttpBackend selection
 
 	url := s.burpMCPURL()
 	burpBackend := NewBurpBackend(url)
