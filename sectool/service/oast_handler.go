@@ -2,12 +2,14 @@ package service
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 )
 
 // handleOastCreate handles POST /oast/create
 func (s *Server) handleOastCreate(w http.ResponseWriter, r *http.Request) {
+	log.Printf("oast/create: creating new session")
 	sess, err := s.oastBackend.CreateSession(r.Context())
 	if err != nil {
 		if IsTimeoutError(err) {
@@ -20,6 +22,7 @@ func (s *Server) handleOastCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("oast/create: created session %s with domain %s", sess.ID, sess.Domain)
 	resp := OastCreateResponse{
 		OastID:   sess.ID,
 		Domain:   sess.Domain,
@@ -54,6 +57,7 @@ func (s *Server) handleOastPoll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	log.Printf("oast/poll: polling session %s (wait=%v since=%q)", req.OastID, wait, req.Since)
 	result, err := s.oastBackend.PollSession(r.Context(), req.OastID, req.Since, wait)
 	if err != nil {
 		s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "session not found or deleted", err.Error())
@@ -73,6 +77,7 @@ func (s *Server) handleOastPoll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	log.Printf("oast/poll: session %s returned %d events", req.OastID, len(events))
 	resp := OastPollResponse{
 		Events:       events,
 		DroppedCount: result.DroppedCount,
@@ -104,6 +109,7 @@ func (s *Server) handleOastList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	log.Printf("oast/list: returning %d active sessions", len(apiSessions))
 	resp := OastListResponse{
 		Sessions: apiSessions,
 	}
@@ -119,7 +125,10 @@ func (s *Server) handleOastDelete(w http.ResponseWriter, r *http.Request) {
 	} else if req.OastID == "" {
 		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "oast_id is required", "")
 		return
-	} else if err := s.oastBackend.DeleteSession(r.Context(), req.OastID); err != nil {
+	}
+
+	log.Printf("oast/delete: deleting session %s", req.OastID)
+	if err := s.oastBackend.DeleteSession(r.Context(), req.OastID); err != nil {
 		s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "session not found", err.Error())
 		return
 	}

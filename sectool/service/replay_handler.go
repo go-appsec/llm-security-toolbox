@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -234,9 +235,11 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 	// Resolve input, tracking original body size for bundles to detect modifications
 	var rawRequest []byte
 	var bundlePath string
+	var inputSource string
 	originalBodySize := -1 // -1 means not from bundle (always update Content-Length)
 	switch {
 	case req.FlowID != "":
+		inputSource = "flow:" + req.FlowID
 		// Fetch from HttpBackend via flow_id
 		entry, ok := s.flowStore.Lookup(req.FlowID)
 		if !ok {
@@ -259,6 +262,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 		rawRequest = []byte(proxyEntries[0].Request)
 
 	case req.BundlePath != "":
+		inputSource = "bundle:" + req.BundlePath
 		// Read from bundle
 		bundlePath = req.BundlePath
 		headers, body, meta, err := readBundle(req.BundlePath)
@@ -272,6 +276,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case req.FilePath != "":
+		inputSource = "file:" + req.FilePath
 		// Read raw file
 		var fileContent []byte
 		var err error
@@ -337,6 +342,12 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 	// Generate replay_id
 	replayID := ids.Generate(ids.DefaultLength)
 
+	scheme := schemeHTTP
+	if usesHTTPS {
+		scheme = schemeHTTPS
+	}
+	log.Printf("replay/send: %s sending to %s://%s:%d (source=%s)", replayID, scheme, host, port, inputSource)
+
 	// Parse timeout if specified
 	var timeout time.Duration
 	if req.Timeout != "" {
@@ -368,6 +379,8 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 	respHeaders := result.Headers
 	respBody := result.Body
+	status := extractStatus(string(respHeaders))
+	log.Printf("replay/send: %s completed in %v (status=%d, size=%d)", replayID, result.Duration, status, len(respBody))
 
 	// Store replay result for later retrieval
 	s.requestStore.Store(replayID, &store.RequestEntry{
@@ -383,7 +396,6 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	respHeaderStr := string(respHeaders)
-	status := extractStatus(respHeaderStr)
 	var statusLine string
 	if parts := strings.SplitN(respHeaderStr, "\r\n", 2); len(parts) > 0 {
 		statusLine = parts[0]
@@ -413,6 +425,7 @@ func (s *Server) handleReplayGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("replay/get: retrieving %s", req.ReplayID)
 	result, ok := s.requestStore.Get(req.ReplayID)
 	if !ok {
 		s.writeError(w, http.StatusNotFound, ErrCodeNotFound,

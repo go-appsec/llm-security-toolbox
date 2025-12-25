@@ -19,7 +19,7 @@ type ServicePaths struct {
 	ServiceDir  string // .sectool/service/
 	SocketPath  string // .sectool/service/socket
 	PIDPath     string // .sectool/service/pid (also used for flock)
-	LogFile     string // .sectool/service/logs.txt
+	LogFile     string // .sectool/service/log.txt
 	RequestsDir string // .sectool/requests/
 }
 
@@ -33,7 +33,7 @@ func NewServicePaths(workDir string) ServicePaths {
 		ServiceDir:  serviceDir,
 		SocketPath:  filepath.Join(serviceDir, "socket"),
 		PIDPath:     filepath.Join(serviceDir, "pid"),
-		LogFile:     filepath.Join(serviceDir, "logs.txt"),
+		LogFile:     filepath.Join(serviceDir, "log.txt"),
 		RequestsDir: filepath.Join(sectoolDir, "requests"),
 	}
 }

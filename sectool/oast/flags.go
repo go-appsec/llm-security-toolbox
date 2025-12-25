@@ -81,7 +81,8 @@ func parsePoll(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: sectool oast poll <oast_id> [options]
 
-Poll for OAST interactions.
+Poll for OAST interactions. Get oast_id from 'sectool oast create' or
+'sectool oast list'.
 
 Options:
 `)
@@ -94,7 +95,7 @@ Options:
 
 	if len(fs.Args()) < 1 {
 		fs.Usage()
-		return errors.New("oast_id required")
+		return errors.New("oast_id required (get from 'sectool oast create' or 'sectool oast list')")
 	}
 
 	return poll(timeout, fs.Args()[0], since, wait)
@@ -143,7 +144,7 @@ Options:
 		return err
 	} else if len(fs.Args()) < 1 {
 		fs.Usage()
-		return errors.New("oast_id required")
+		return errors.New("oast_id required (get from 'sectool oast list')")
 	}
 
 	return del(timeout, fs.Args()[0])

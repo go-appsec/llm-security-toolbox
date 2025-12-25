@@ -134,9 +134,11 @@ func printSuccess(outputPath string, written bool) {
 		fmt.Printf("Initialized %s\n", outputPath)
 	}
 
-	fmt.Println("Start an agent with this system prompt:")
+	fmt.Println("Start Burp Suite with MCP then run your agent with this system prompt:")
 	fmt.Println()
 	fmt.Printf("  claude --system-prompt-file %s\n", outputPath)
 	fmt.Printf("  codex (add to AGENTS.md or use -c experimental_instructions_file=%s)\n", outputPath)
 	fmt.Println("  crush (reference in .crush.json configuration)")
+	fmt.Println()
+	fmt.Println("Follow agent action logs with: 'tail -F .sectool/service/log.txt'")
 }

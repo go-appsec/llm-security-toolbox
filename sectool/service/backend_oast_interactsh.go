@@ -106,6 +106,8 @@ func (b *InteractshBackend) CreateSession(ctx context.Context) (*OastSessionInfo
 	b.byDomain[domain] = sessionID
 	b.mu.Unlock()
 
+	log.Printf("oast: created session %s with domain %s", sessionID, domain)
+
 	// Start background polling
 	go b.pollLoop(sess)
 
@@ -159,6 +161,7 @@ func (b *InteractshBackend) pollLoop(sess *oastSession) {
 		}
 
 		sess.events = append(sess.events, event)
+		log.Printf("oast: session %s received %s event from %s", sess.info.ID, event.Type, event.SourceIP)
 	}
 
 	if err := sess.client.StartPolling(interactshPollInterval, callback); err != nil {
@@ -302,6 +305,7 @@ func (b *InteractshBackend) deleteSession(sess *oastSession) error {
 	delete(b.byDomain, sess.info.Domain)
 	b.mu.Unlock()
 
+	log.Printf("oast: session %s deleted", sess.info.ID)
 	return nil
 }
 

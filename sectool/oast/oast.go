@@ -21,7 +21,7 @@ func create(timeout time.Duration) error {
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	resp, err := client.OastCreate(ctx)
@@ -128,7 +128,7 @@ func list(timeout time.Duration) error {
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	resp, err := client.OastList(ctx)
@@ -168,7 +168,7 @@ func del(timeout time.Duration, oastID string) error {
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	_, err = client.OastDelete(ctx, &service.OastDeleteRequest{

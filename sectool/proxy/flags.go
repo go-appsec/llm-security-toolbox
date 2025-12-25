@@ -65,7 +65,15 @@ func parseList(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: sectool proxy list [options]
 
-List proxy history entries.
+List proxy history entries. Without filters shows aggregated view; with filters
+shows individual flows with flow_ids for export.
+
+Filter examples:
+  --host api.example.com          Exact host match
+  --host "*.example.com"          Glob pattern (subdomains)
+  --path "/api/*"                 Path prefix
+  --method POST,PUT               Multiple methods
+  --status 200,201                Multiple status codes
 
 Options:
 `)
@@ -90,7 +98,10 @@ func parseExport(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: sectool proxy export <flow_id> [options]
 
-Export a flow to disk for editing.
+Export a flow to disk for editing and replay.
+
+First, find the flow_id using 'sectool proxy list' with filters:
+  sectool proxy list --host example.com --path /api/*
 
 Creates a request bundle in .sectool/requests/<bundle_id>/ containing:
   request.http       HTTP headers (with body placeholder)
@@ -112,7 +123,7 @@ Options:
 		return err
 	} else if len(fs.Args()) < 1 {
 		fs.Usage()
-		return errors.New("flow_id required")
+		return errors.New("flow_id required (get from 'sectool proxy list' with filters)")
 	}
 
 	return export(timeout, fs.Args()[0], out)

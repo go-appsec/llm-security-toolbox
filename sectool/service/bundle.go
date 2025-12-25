@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,6 +25,7 @@ type bundleMeta struct {
 }
 
 func writeBundle(dir string, headers, body []byte, meta *bundleMeta) error {
+	log.Printf("bundle: writing to %s (body_size=%d)", dir, len(body))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create bundle directory: %w", err)
 	}
@@ -62,6 +64,7 @@ func writeBundle(dir string, headers, body []byte, meta *bundleMeta) error {
 
 // readBundle reads a request bundle from disk.
 func readBundle(dir string) (headers, body []byte, meta *bundleMeta, err error) {
+	log.Printf("bundle: reading from %s", dir)
 	metaBytes, err := os.ReadFile(filepath.Join(dir, "request.meta.json"))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to read meta: %w", err)

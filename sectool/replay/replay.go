@@ -21,7 +21,7 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	req := &service.ReplaySendRequest{
@@ -75,7 +75,7 @@ func get(timeout time.Duration, replayID string) error {
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	resp, err := client.ReplayGet(ctx, &service.ReplayGetRequest{

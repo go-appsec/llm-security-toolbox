@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -74,6 +75,8 @@ func (c *BurpClient) Connect(ctx context.Context) error {
 		return nil
 	}
 
+	log.Printf("mcp: connecting to %s", c.url)
+
 	// Use provided HTTP client or create one with timeout
 	httpClient := c.httpClient
 	if httpClient == nil {
@@ -111,6 +114,7 @@ func (c *BurpClient) Connect(ctx context.Context) error {
 
 	c.mcpClient = mcpClient
 	c.connected.Store(true)
+	log.Printf("mcp: session initialized successfully")
 	return nil
 }
 
@@ -132,6 +136,7 @@ func (c *BurpClient) URL() string {
 
 func (c *BurpClient) Close() error {
 	if c.mcpClient != nil {
+		log.Printf("mcp: closing connection")
 		err := c.mcpClient.Close()
 		c.mcpClient = nil
 		c.connected.Store(false)

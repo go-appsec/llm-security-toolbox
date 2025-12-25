@@ -22,7 +22,7 @@ func list(timeout time.Duration, host, path, method, status, contains, containsB
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	resp, err := client.ProxyList(ctx, &service.ProxyListRequest{
@@ -111,7 +111,7 @@ func export(timeout time.Duration, flowID, out string) error {
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
 	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
 	resp, err := client.ProxyExport(ctx, &service.ProxyExportRequest{

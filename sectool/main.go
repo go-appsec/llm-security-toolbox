@@ -89,7 +89,7 @@ func printRootUsage() {
 	fmt.Fprint(os.Stderr, `Usage: sectool <command> [options]
 
 Commands:
-  init       Initialize working directory for agent work
+  init       Initialize working directory for security agent task
   service    Manage the sectool service (status, stop, logs)
   proxy      Query and manage proxy history
   replay     Replay HTTP requests (with validation)

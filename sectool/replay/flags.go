@@ -73,9 +73,16 @@ func parseSend(args []string) error {
 Send a request through Burp Repeater.
 
 Input sources (exactly one required):
-  --flow <flow_id>      Replay from proxy history
-  --bundle <path>       Replay from request bundle directory
+  --flow <flow_id>      Replay from proxy history (get flow_id from 'sectool proxy list')
+  --bundle <path>       Replay from exported bundle (create with 'sectool proxy export')
   --file <path>         Replay from raw HTTP file (- for stdin)
+
+File format (--file):
+  Standard HTTP/1.1 request format with CRLF line endings. First line is the
+  request line, followed by headers, blank line, then optional body:
+    GET /path HTTP/1.1\r\n
+    Host: example.com\r\n
+    \r\n
 
 Validation:
   Requests are validated before sending. If validation fails, the request
@@ -131,7 +138,7 @@ Options:
 		return err
 	} else if len(fs.Args()) < 1 {
 		fs.Usage()
-		return errors.New("replay_id required")
+		return errors.New("replay_id required (get from 'sectool replay send' output)")
 	}
 
 	return get(timeout, fs.Args()[0])

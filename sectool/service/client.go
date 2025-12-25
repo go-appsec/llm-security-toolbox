@@ -63,6 +63,11 @@ func NewClient(workDir string, opts ...ClientOption) *Client {
 	return c
 }
 
+// LogPath returns the path to the service log file.
+func (c *Client) LogPath() string {
+	return c.paths.LogFile
+}
+
 // EnsureService ensures the service is running, starting it if necessary.
 func (c *Client) EnsureService(ctx context.Context) error {
 	if c.CheckHealth(ctx) == nil {
@@ -212,7 +217,7 @@ func (c *Client) waitForHealthy(ctx context.Context) error {
 		time.Sleep(startupPollInterval)
 	}
 
-	return fmt.Errorf("service did not become healthy within %v", startupTimeout)
+	return fmt.Errorf("service did not become healthy within %v (check %s)", startupTimeout, c.paths.LogFile)
 }
 
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader) (*APIResponse, error) {

@@ -87,7 +87,7 @@ sectool/
 ├── service/
 │   ├── pid               # PID file with exclusive flock
 │   ├── socket            # Unix domain socket
-│   └── logs.txt          # Service logs (append-only)
+│   └── log.txt           # Service logs (append-only)
 └── requests/             # Exported request bundles
     └── <bundle_id>/
         ├── request.http       # HTTP headers with body placeholder

@@ -88,6 +88,8 @@ func (s *Server) WaitTillStarted() {
 
 // Run starts the server and blocks until shutdown.
 func (s *Server) Run(ctx context.Context) error {
+	log.Printf("service starting (version=%s, workdir=%s)", config.Version, s.paths.WorkDir)
+
 	markStarted := sync.OnceFunc(func() {
 		s.startedAt = time.Now()
 		close(s.started)
@@ -138,6 +140,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	// Setup OAST (nothing connected till used)
 	s.oastBackend = NewInteractshBackend()
+	log.Printf("service ready, listening on %s", s.paths.SocketPath)
 
 	// Run server in goroutine
 	serverErr := make(chan error, 1)
@@ -352,6 +355,11 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) 
 
 // writeError writes an error JSON response
 func (s *Server) writeError(w http.ResponseWriter, status int, code, message, hint string) {
+	if hint != "" {
+		log.Printf("error: %s - %s (%s)", code, message, hint)
+	} else {
+		log.Printf("error: %s - %s", code, message)
+	}
 	resp := ErrorResponse(code, message, hint)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -408,7 +416,7 @@ func (s *Server) connectBurpMCP(ctx context.Context) error {
 	burpBackend := NewBurpBackend(url)
 
 	burpBackend.OnConnectionLost(func(err error) {
-		log.Printf("BurpSuite MCP connection lost: %v", err)
+		log.Printf("Burp MCP connection lost: %v", err)
 	})
 
 	if err := burpBackend.Connect(ctx); err != nil {
@@ -416,6 +424,5 @@ func (s *Server) connectBurpMCP(ctx context.Context) error {
 	}
 
 	s.httpBackend = burpBackend
-	log.Printf("connected to Burp MCP at %s", url)
 	return nil
 }

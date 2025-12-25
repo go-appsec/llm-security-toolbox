@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"path"
 	"strconv"
@@ -30,10 +31,16 @@ func NewBurpBackend(url string, opts ...mcp.Option) *BurpBackend {
 }
 
 func (b *BurpBackend) Connect(ctx context.Context) error {
-	return b.client.Connect(ctx)
+	log.Printf("burp: connecting to MCP at %s", b.client.URL())
+	if err := b.client.Connect(ctx); err != nil {
+		log.Printf("burp: connection failed: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (b *BurpBackend) Close() error {
+	log.Printf("burp: closing connection")
 	return b.client.Close()
 }
 
@@ -71,6 +78,13 @@ func convertMCPEntries(entries []mcp.ProxyHistoryEntry) []ProxyEntry {
 }
 
 func (b *BurpBackend) SendRequest(ctx context.Context, name string, req SendRequestInput) (*SendRequestResult, error) {
+	scheme := schemeHTTP
+	if req.Target.UsesHTTPS {
+		scheme = schemeHTTPS
+	}
+	log.Printf("burp: sending request %s to %s://%s:%d (follow_redirects=%v)",
+		name, scheme, req.Target.Hostname, req.Target.Port, req.FollowRedirects)
+
 	// Apply timeout if specified
 	if req.Timeout > 0 {
 		var cancel context.CancelFunc

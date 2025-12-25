@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -181,6 +182,13 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.HasFilters() {
+		log.Printf("proxy/list: fetching with filters (host=%q path=%q method=%q status=%q since=%q)",
+			req.Host, req.Path, req.Method, req.Status, req.Since)
+	} else {
+		log.Printf("proxy/list: fetching aggregated summary")
+	}
+
 	ctx := r.Context()
 
 	// Build regex filter if applicable (moved outside loop for efficiency)
@@ -281,10 +289,12 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 				ResponseLength: entry.respLen,
 			})
 		}
+		log.Printf("proxy/list: returning %d flows (fetched %d, filtered %d)", len(flows), len(allEntries), len(allEntries)-len(filtered))
 		s.writeJSON(w, http.StatusOK, ProxyListResponse{Flows: flows})
 	} else {
 		// Return aggregates
 		agg := aggregateByTuple(filtered)
+		log.Printf("proxy/list: returning %d aggregates from %d entries", len(agg), len(filtered))
 		s.writeJSON(w, http.StatusOK, ProxyListResponse{Aggregates: agg})
 	}
 
@@ -363,6 +373,8 @@ func (s *Server) handleProxyExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("proxy/export: exporting flow %s", req.FlowID)
+
 	entry, ok := s.flowStore.Lookup(req.FlowID)
 	if !ok {
 		s.writeError(w, http.StatusNotFound, ErrCodeNotFound,
@@ -419,6 +431,7 @@ func (s *Server) handleProxyExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("proxy/export: exported flow %s to bundle %s at %s", req.FlowID, bundleID, bundlePath)
 	s.writeJSON(w, http.StatusOK, ProxyExportResponse{
 		BundleID:   bundleID,
 		BundlePath: bundlePath,
