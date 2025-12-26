@@ -2,12 +2,17 @@ package encode
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
+
+var encodeSubcommands = []string{"url", "base64", "html", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -26,7 +31,7 @@ func Parse(args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown encoding type: %s", args[0])
+		return cli.UnknownSubcommandError("encode", args[0], encodeSubcommands)
 	}
 }
 
@@ -54,14 +59,13 @@ Examples:
 }
 
 func parseAndRun(name string, args []string, fn func(string, bool) (string, error)) error {
-	fs := flag.NewFlagSet("encode "+name, flag.ContinueOnError)
+	fs := pflag.NewFlagSet("encode "+name, pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var decode, raw bool
 	var file string
 
-	fs.BoolVar(&decode, "d", false, "decode instead of encode")
-	fs.BoolVar(&decode, "decode", false, "decode instead of encode")
-	fs.StringVar(&file, "f", "", "read input from file (- for stdin)")
-	fs.StringVar(&file, "file", "", "read input from file (- for stdin)")
+	fs.BoolVarP(&decode, "decode", "d", false, "decode instead of encode")
+	fs.StringVarP(&file, "file", "f", "", "read input from file (- for stdin)")
 	fs.BoolVar(&raw, "raw", false, "output without trailing newline")
 
 	fs.Usage = func() {

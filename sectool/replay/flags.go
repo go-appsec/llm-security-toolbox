@@ -2,22 +2,16 @@ package replay
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
 
-type stringSlice []string
-
-func (s *stringSlice) String() string {
-	return fmt.Sprintf("%v", *s)
-}
-
-func (s *stringSlice) Set(v string) error {
-	*s = append(*s, v)
-	return nil
-}
+var replaySubcommands = []string{"send", "get", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -34,7 +28,7 @@ func Parse(args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown replay subcommand: %s", args[0])
+		return cli.UnknownSubcommandError("replay", args[0], replaySubcommands)
 	}
 }
 
@@ -52,11 +46,12 @@ Use "sectool replay <command> --help" for more information.
 }
 
 func parseSend(args []string) error {
-	fs := flag.NewFlagSet("replay send", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("replay send", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout, requestTimeout time.Duration
 	var flow, bundle, file, body, target string
 	var followRedirects, force bool
-	var headers, removeHeaders stringSlice
+	var headers, removeHeaders []string
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 	fs.StringVar(&flow, "flow", "", "flow_id to replay from proxy history")
@@ -64,8 +59,8 @@ func parseSend(args []string) error {
 	fs.StringVar(&file, "file", "", "path to request.http file (- for stdin)")
 	fs.StringVar(&body, "body", "", "path to body file (use with --file)")
 	fs.StringVar(&target, "target", "", "override target URL (scheme://host:port)")
-	fs.Var(&headers, "header", "add/replace header (repeatable)")
-	fs.Var(&removeHeaders, "remove-header", "remove header by name (repeatable)")
+	fs.StringArrayVar(&headers, "header", nil, "add/replace header (repeatable)")
+	fs.StringArrayVar(&removeHeaders, "remove-header", nil, "remove header by name (repeatable)")
 	fs.BoolVar(&followRedirects, "follow-redirects", false, "follow 3xx redirects")
 	fs.DurationVar(&requestTimeout, "request-timeout", 0, "HTTP request timeout (0 = no timeout)")
 	fs.BoolVar(&force, "force", false, "send request even if validation fails")
@@ -122,7 +117,8 @@ Options:
 }
 
 func parseGet(args []string) error {
-	fs := flag.NewFlagSet("replay get", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("replay get", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")

@@ -2,13 +2,19 @@ package initialize
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
+
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
 
+var initModes = []string{"test-report", "explore", "help"}
+
 func Parse(args []string) error {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("init", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var reset bool
 	fs.BoolVar(&reset, "reset", false, "clear all state and reinitialize")
 
@@ -26,25 +32,24 @@ Options:
 		fs.PrintDefaults()
 	}
 
-	// Find mode first (first non-flag argument)
-	var mode string
-	flagArgs := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "test-report" || arg == "explore" {
-			mode = arg
-		} else {
-			flagArgs = append(flagArgs, arg)
-		}
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	if mode == "" {
+	remaining := fs.Args()
+	if len(remaining) == 0 {
 		fs.Usage()
 		return errors.New("mode required: test-report or explore")
-	} else if err := fs.Parse(flagArgs); err != nil {
-		return err
-	} else if len(fs.Args()) > 0 {
-		return fmt.Errorf("unknown init mode: %s (expected test-report or explore)", fs.Args()[0])
 	}
 
-	return run(mode, reset)
+	mode := remaining[0]
+	switch mode {
+	case "test-report", "explore":
+		return run(mode, reset)
+	case "help", "--help", "-h":
+		fs.Usage()
+		return nil
+	default:
+		return cli.UnknownModeError("init", mode, initModes)
+	}
 }

@@ -2,11 +2,16 @@ package proxy
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
+
+var proxySubcommands = []string{"list", "export", "intercept", "rule", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -27,7 +32,7 @@ func Parse(args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown proxy subcommand: %s", args[0])
+		return cli.UnknownSubcommandError("proxy", args[0], proxySubcommands)
 	}
 }
 
@@ -47,7 +52,8 @@ Use "sectool proxy <command> --help" for more information.
 }
 
 func parseList(args []string) error {
-	fs := flag.NewFlagSet("proxy list", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy list", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 	var host, path, method, status, contains, containsBody, since, excludeHost, excludePath string
 
@@ -88,7 +94,8 @@ Options:
 }
 
 func parseExport(args []string) error {
-	fs := flag.NewFlagSet("proxy export", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy export", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 	var out string
 
@@ -130,7 +137,8 @@ Options:
 }
 
 func parseIntercept(args []string) error {
-	fs := flag.NewFlagSet("proxy intercept", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy intercept", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -160,6 +168,8 @@ Options:
 	return intercept(timeout, state)
 }
 
+var ruleSubcommands = []string{"add", "list", "remove", "help"}
+
 func parseRule(args []string) error {
 	if len(args) < 1 {
 		printRuleUsage()
@@ -177,7 +187,7 @@ func parseRule(args []string) error {
 		printRuleUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown proxy rule subcommand: %s", args[0])
+		return cli.UnknownSubcommandError("proxy rule", args[0], ruleSubcommands)
 	}
 }
 
@@ -196,7 +206,8 @@ Use "sectool proxy rule <command> --help" for more information.
 }
 
 func parseRuleAdd(args []string) error {
-	fs := flag.NewFlagSet("proxy rule add", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy rule add", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 	var host, path, method, action string
 
@@ -224,7 +235,8 @@ Options:
 }
 
 func parseRuleList(args []string) error {
-	fs := flag.NewFlagSet("proxy rule list", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy rule list", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -247,7 +259,8 @@ Options:
 }
 
 func parseRuleRemove(args []string) error {
-	fs := flag.NewFlagSet("proxy rule remove", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("proxy rule remove", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")

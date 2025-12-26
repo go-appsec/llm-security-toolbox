@@ -2,11 +2,16 @@ package oast
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
+
+var oastSubcommands = []string{"create", "poll", "list", "delete", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -27,7 +32,7 @@ func Parse(args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown oast subcommand: %s", args[0])
+		return cli.UnknownSubcommandError("oast", args[0], oastSubcommands)
 	}
 }
 
@@ -47,7 +52,8 @@ Use "sectool oast <command> --help" for more information.
 }
 
 func parseCreate(args []string) error {
-	fs := flag.NewFlagSet("oast create", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("oast create", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -70,7 +76,8 @@ Options:
 }
 
 func parsePoll(args []string) error {
-	fs := flag.NewFlagSet("oast poll", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("oast poll", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout, wait time.Duration
 	var since string
 
@@ -102,7 +109,8 @@ Options:
 }
 
 func parseList(args []string) error {
-	fs := flag.NewFlagSet("oast list", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("oast list", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -125,7 +133,8 @@ Options:
 }
 
 func parseDelete(args []string) error {
-	fs := flag.NewFlagSet("oast delete", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("oast delete", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")

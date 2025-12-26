@@ -2,11 +2,13 @@ package service
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 )
 
@@ -16,7 +18,8 @@ type DaemonFlags struct {
 }
 
 func ParseDaemonFlags(args []string) (DaemonFlags, error) {
-	fs := flag.NewFlagSet("service", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("service", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	flags := DaemonFlags{BurpMCPURL: config.DefaultBurpMCPURL}
 
 	fs.StringVar(&flags.WorkDir, "workdir", "", "working directory for service state")
@@ -28,6 +31,8 @@ func ParseDaemonFlags(args []string) (DaemonFlags, error) {
 
 	return flags, nil
 }
+
+var serviceSubcommands = []string{"status", "stop", "logs", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -46,7 +51,7 @@ func Parse(args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown service subcommand: %s", args[0])
+		return cli.UnknownSubcommandError("service", args[0], serviceSubcommands)
 	}
 }
 
@@ -65,7 +70,8 @@ Use "sectool service <command> --help" for more information.
 }
 
 func parseStatus(args []string) error {
-	fs := flag.NewFlagSet("service status", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("service status", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -88,7 +94,8 @@ Options:
 }
 
 func parseStop(args []string) error {
-	fs := flag.NewFlagSet("service stop", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("service stop", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -111,16 +118,15 @@ Options:
 }
 
 func parseLogs(args []string) error {
-	fs := flag.NewFlagSet("service logs", flag.ContinueOnError)
+	fs := pflag.NewFlagSet("service logs", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
 	var timeout time.Duration
 	var follow bool
 	var lines int
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
-	fs.BoolVar(&follow, "f", false, "follow log output")
-	fs.BoolVar(&follow, "follow", false, "follow log output")
-	fs.IntVar(&lines, "n", 50, "number of lines to show")
-	fs.IntVar(&lines, "lines", 50, "number of lines to show")
+	fs.BoolVarP(&follow, "follow", "f", false, "follow log output")
+	fs.IntVarP(&lines, "lines", "n", 50, "number of lines to show")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: sectool service logs [options]

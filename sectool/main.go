@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 
+	"github.com/spf13/pflag"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 	"github.com/jentfoo/llm-security-toolbox/sectool/encode"
 	"github.com/jentfoo/llm-security-toolbox/sectool/initialize"
@@ -70,13 +72,12 @@ func runClientCLI(args []string) int {
 		printRootUsage()
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
-		printRootUsage()
-		return 1
+		validCommands := []string{"init", "service", "proxy", "replay", "oast", "encode", "version", "help"}
+		err = cli.UnknownCommandError(args[0], validCommands)
 	}
 
 	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, pflag.ErrHelp) {
 			return 0
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
