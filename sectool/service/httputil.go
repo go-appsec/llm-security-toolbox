@@ -86,6 +86,34 @@ func readResponseBytes(resp []byte) (*http.Response, error) {
 	return http.ReadResponse(bufio.NewReader(bytes.NewReader(resp)), nil)
 }
 
+// readResponseStatusCode extracts the HTTP status code from raw response bytes.
+// Returns 0 if the status code cannot be extracted or is invalid.
+// Handles both \r\n and \n line endings, and validates status code range.
+func readResponseStatusCode(resp []byte) int {
+	// Find end of status line (handle both \r\n and \n)
+	lineEnd := bytes.IndexByte(resp, '\n')
+	if lineEnd < 0 {
+		lineEnd = len(resp)
+	}
+	if lineEnd > 100 {
+		return 0 // status line shouldn't be this long
+	}
+
+	line := strings.TrimSuffix(string(resp[:lineEnd]), "\r")
+
+	// Status line: "HTTP/x.y SSS reason" or "HTTP/2 SSS"
+	parts := strings.SplitN(line, " ", 3)
+	if len(parts) < 2 {
+		return 0
+	}
+
+	code, err := strconv.Atoi(parts[1])
+	if err != nil || code < 100 || code >= 600 {
+		return 0
+	}
+	return code
+}
+
 // extractHeaderLines extracts header lines from raw HTTP request.
 // Skips the request line and returns each header as "Name: Value".
 func extractHeaderLines(raw string) []string {

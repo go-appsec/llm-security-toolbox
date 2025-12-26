@@ -176,13 +176,7 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 		// Parse entries into flowEntry format
 		for i, entry := range proxyEntries {
 			method, host, path := extractRequestMeta(entry.Request)
-			var status int
-			if resp, err := readResponseBytes([]byte(entry.Response)); err == nil {
-				_ = resp.Body.Close()
-				status = resp.StatusCode
-			} else {
-				log.Printf("proxy/list: failed to parse response at offset %d: %v", offset+uint32(i), err)
-			}
+			status := readResponseStatusCode([]byte(entry.Response))
 			_, respBody := splitHeadersBody([]byte(entry.Response))
 
 			allEntries = append(allEntries, flowEntry{

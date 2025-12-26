@@ -48,10 +48,55 @@ func (b *BurpBackend) OnConnectionLost(handler func(error)) {
 	b.client.OnConnectionLost(handler)
 }
 
+// ensureConnected checks if the client is connected and attempts reconnection if not.
+func (b *BurpBackend) ensureConnected(ctx context.Context) error {
+	if b.client.IsConnected() {
+		return nil
+	}
+	log.Printf("burp: connection lost, attempting reconnection...")
+	if err := b.client.Connect(ctx); err != nil {
+		return fmt.Errorf("reconnection failed: %w", err)
+	}
+	log.Printf("burp: reconnected successfully")
+	return nil
+}
+
+// isConnectionError checks if an error indicates a connection problem that warrants retry.
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, mcp.ErrNotConnected) {
+		return true
+	}
+	// Check for common connection-related error patterns
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection") ||
+		strings.Contains(errStr, "transport") ||
+		strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "context canceled")
+}
+
 func (b *BurpBackend) GetProxyHistory(ctx context.Context, count int, offset uint32) ([]ProxyEntry, error) {
+	// Ensure connected before operation
+	if err := b.ensureConnected(ctx); err != nil {
+		return nil, err
+	}
+
 	entries, err := b.client.GetProxyHistory(ctx, count, int(offset))
 	if err != nil {
-		return nil, err
+		// On connection error, try reconnection and retry once
+		if isConnectionError(err) {
+			if reconnErr := b.ensureConnected(ctx); reconnErr != nil {
+				return nil, err // return original error
+			}
+			entries, err = b.client.GetProxyHistory(ctx, count, int(offset))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	return convertMCPEntries(entries), nil
 }
@@ -77,6 +122,11 @@ func (b *BurpBackend) SendRequest(ctx context.Context, name string, req SendRequ
 	log.Printf("burp: sending request %s to %s://%s:%d (follow_redirects=%v)",
 		name, scheme, req.Target.Hostname, req.Target.Port, req.FollowRedirects)
 
+	// Ensure connected before operation
+	if err := b.ensureConnected(ctx); err != nil {
+		return nil, err
+	}
+
 	// Apply timeout if specified
 	if req.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -84,6 +134,19 @@ func (b *BurpBackend) SendRequest(ctx context.Context, name string, req SendRequ
 		defer cancel()
 	}
 
+	result, err := b.doSendRequest(ctx, name, req)
+	if err != nil && isConnectionError(err) {
+		// Try reconnection and retry once
+		if reconnErr := b.ensureConnected(ctx); reconnErr != nil {
+			return nil, err // return original error
+		}
+		return b.doSendRequest(ctx, name, req)
+	}
+	return result, err
+}
+
+// doSendRequest performs the actual request sending (without reconnection logic).
+func (b *BurpBackend) doSendRequest(ctx context.Context, name string, req SendRequestInput) (*SendRequestResult, error) {
 	err := b.client.CreateRepeaterTab(ctx, mcp.RepeaterTabParams{
 		TabName:        name,
 		Content:        string(req.RawRequest),
