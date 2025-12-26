@@ -11,29 +11,30 @@ import (
 	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 )
 
-func TestBurpNotConnected(t *testing.T) {
+func TestBurpClientClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	t.Cleanup(cancel)
 
 	client := New(config.DefaultBurpMCPURL)
+	_ = client.Close() // Close immediately
 
 	_, err := client.GetProxyHistory(ctx, 10, 0)
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 
 	_, err = client.GetProxyHistoryRaw(ctx, 10, 0)
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 
 	_, err = client.GetProxyHistoryRegex(ctx, "test", 10, 0)
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 
 	err = client.SetInterceptState(ctx, false)
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 
 	_, err = client.SendHTTP1Request(ctx, SendRequestParams{})
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 
 	err = client.CreateRepeaterTab(ctx, RepeaterTabParams{})
-	require.ErrorIs(t, err, ErrNotConnected)
+	require.ErrorIs(t, err, ErrClientClosed)
 }
 
 func TestSanitizeBurpJSON(t *testing.T) {

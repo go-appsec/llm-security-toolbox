@@ -419,17 +419,10 @@ func (s *Server) burpMCPURL() string {
 func (s *Server) connectBurpMCP(ctx context.Context) error {
 	// TODO - FUTURE - replace this with a HttpBackend selection
 
-	url := s.burpMCPURL()
-	burpBackend := NewBurpBackend(url)
-
-	burpBackend.OnConnectionLost(func(err error) {
-		log.Printf("Burp MCP connection lost: %v", err)
-	})
-
+	burpBackend := NewBurpBackend(s.burpMCPURL())
 	if err := burpBackend.Connect(ctx); err != nil {
 		return err
 	}
-
 	s.httpBackend = burpBackend
 	return nil
 }

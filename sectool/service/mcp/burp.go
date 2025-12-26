@@ -10,7 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -28,7 +28,13 @@ const (
 	ProtocolVersion = "2024-11-05"
 
 	// DefaultDialTimeout is the timeout for establishing a connection.
-	DefaultDialTimeout = 30 * time.Second
+	DefaultDialTimeout = 10 * time.Second
+
+	// healthCheckInterval is how often we ping the MCP connection
+	healthCheckInterval = 4 * time.Second
+
+	// healthCheckTimeout is the timeout for each ping
+	healthCheckTimeout = 2 * time.Second
 
 	// endOfItemsMarker is returned by Burp MCP when pagination reaches the end.
 	endOfItemsMarker = "Reached end of items"
@@ -37,12 +43,20 @@ const (
 // ErrNotConnected is returned when an operation is attempted without a connection.
 var ErrNotConnected = errors.New("not connected to Burp MCP")
 
+// ErrClientClosed is returned when an operation is attempted on a closed client.
+var ErrClientClosed = errors.New("client closed")
+
 // BurpClient wraps the mcp-go SSE client to provide Burp-specific functionality.
+// Thread-safe for concurrent use. All MCP operations are serialized via mutex.
 type BurpClient struct {
-	mcpClient  *client.Client
 	url        string
 	httpClient *http.Client
-	connected  atomic.Bool
+
+	mu               sync.Mutex
+	mcpClient        *client.Client
+	onConnectionLost func(error)
+	closed           bool
+	done             chan struct{} // closed on Close() to signal health loop
 }
 
 // Option configures the BurpClient.
@@ -55,34 +69,40 @@ func WithHTTPClient(httpClient *http.Client) Option {
 	}
 }
 
-// New creates a new BurpClient but does not connect.
-// Call Connect to establish the connection.
+// New creates a new BurpClient and starts the health monitoring loop.
+// Call Connect to establish the connection, or let operations connect lazily.
 func New(url string, opts ...Option) *BurpClient {
 	if url == "" {
 		url = config.DefaultBurpMCPURL
 	}
 	c := &BurpClient{
-		url: url,
+		url:  url,
+		done: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
+	go c.healthLoop()
 	return c
 }
 
 // Connect establishes the SSE connection and performs the MCP handshake.
+// Safe to call multiple times - returns immediately if already connected.
 func (c *BurpClient) Connect(ctx context.Context) error {
-	if c.connected.Load() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return ErrClientClosed
+	}
+	if c.mcpClient != nil {
 		return nil
 	}
+	return c.connectLocked(ctx)
+}
 
-	// Close any stale client before reconnecting
-	if c.mcpClient != nil {
-		log.Printf("mcp: closing stale connection before reconnect")
-		_ = c.mcpClient.Close()
-		c.mcpClient = nil
-	}
-
+// connectLocked performs the actual connection. Caller must hold c.mu.
+func (c *BurpClient) connectLocked(ctx context.Context) error {
 	log.Printf("mcp: connecting to %s", c.url)
 
 	// Use provided HTTP client or create one suitable for SSE
@@ -92,11 +112,10 @@ func (c *BurpClient) Connect(ctx context.Context) error {
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   DefaultDialTimeout,
-					KeepAlive: 30 * time.Second,
+					KeepAlive: 20 * time.Second,
 				}).DialContext,
 				TLSHandshakeTimeout:   10 * time.Second,
 				ResponseHeaderTimeout: DefaultDialTimeout,
-				IdleConnTimeout:       90 * time.Second,
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return errors.New("redirect not allowed")
@@ -110,7 +129,7 @@ func (c *BurpClient) Connect(ctx context.Context) error {
 	}
 
 	// Use context.Background() for SSE stream - it needs to be long-lived
-	// The passed ctx is only used for the initial connect timeout via httpClient
+	// The passed ctx is only used for the initialization timeout
 	if err := mcpClient.Start(context.Background()); err != nil {
 		return fmt.Errorf("failed to connect to Burp MCP at %s: %w", c.url, err)
 	}
@@ -129,41 +148,160 @@ func (c *BurpClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("MCP initialization failed: %w", err)
 	}
 
+	// Handle connection lost - clear state if still current, always close the dead client
+	mcpClient.OnConnectionLost(func(err error) {
+		log.Printf("mcp: connection lost: %v", err)
+
+		go func() { // async to avoid deadlock risk with locking
+			c.mu.Lock()
+			if c.mcpClient == mcpClient {
+				c.mcpClient = nil
+			}
+			c.mu.Unlock()
+			_ = mcpClient.Close()
+		}()
+	})
+
 	c.mcpClient = mcpClient
-	c.connected.Store(true)
 	log.Printf("mcp: session initialized successfully")
 	return nil
 }
 
-// OnConnectionLost sets a handler to be called when the connection is lost.
-func (c *BurpClient) OnConnectionLost(handler func(error)) {
-	if c.mcpClient != nil {
-		c.mcpClient.OnConnectionLost(func(err error) {
-			c.connected.Store(false)
-			if handler != nil {
-				handler(err)
+// healthLoop periodically pings the MCP connection to detect failures early.
+// Runs until Close() is called.
+func (c *BurpClient) healthLoop() {
+	ticker := time.NewTicker(healthCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			if notify := c.doHealthCheck(); notify != nil {
+				notify()
 			}
-		})
+		}
 	}
+}
+
+// doHealthCheck performs a single health check, returning a callback to invoke
+// outside the lock if notification is needed.
+func (c *BurpClient) doHealthCheck() func() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.mcpClient == nil {
+		return nil
+	}
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), healthCheckTimeout)
+	err := c.mcpClient.Ping(pingCtx)
+	cancel()
+
+	if err != nil {
+		log.Printf("mcp: health check failed: %v", err)
+		_ = c.closeLocked()
+		if handler := c.onConnectionLost; handler != nil {
+			return func() { handler(err) }
+		}
+	}
+	return nil
+}
+
+// OnConnectionLost sets a handler to be called when the connection is lost.
+// Can be called at any time. The handler is called asynchronously.
+func (c *BurpClient) OnConnectionLost(handler func(error)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onConnectionLost = handler
 }
 
 func (c *BurpClient) URL() string {
 	return c.url
 }
 
+// Close closes the client and stops the health loop.
+// Safe to call multiple times.
 func (c *BurpClient) Close() error {
-	if c.mcpClient != nil {
-		log.Printf("mcp: closing connection")
-		err := c.mcpClient.Close()
-		c.mcpClient = nil
-		c.connected.Store(false)
-		return err
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return nil
 	}
-	return nil
+	c.closed = true
+	close(c.done)
+	return c.closeLocked()
 }
 
+// closeLocked closes the current connection. Caller must hold c.mu.
+func (c *BurpClient) closeLocked() error {
+	if c.mcpClient == nil {
+		return nil
+	}
+	log.Printf("mcp: closing connection")
+	err := c.mcpClient.Close()
+	c.mcpClient = nil
+	return err
+}
+
+// IsConnected returns true if connected to the MCP server.
 func (c *BurpClient) IsConnected() bool {
-	return c.connected.Load()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mcpClient != nil
+}
+
+// withConn executes fn with a valid connection, reconnecting if needed.
+// Holds lock for entire operation, serializing all MCP traffic.
+// On connection error, reconnects and retries once with fresh context.
+func (c *BurpClient) withConn(ctx context.Context, fn func(context.Context) error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return ErrClientClosed
+	}
+
+	if c.mcpClient == nil { // ensure connected
+		if err := c.connectLocked(ctx); err != nil {
+			return err
+		}
+	}
+
+	// First attempt
+	err := fn(ctx)
+	if err == nil || !isConnectionError(err) {
+		return err
+	}
+
+	// Connection error - close and reconnect
+	log.Printf("mcp: operation failed with connection error, retrying: %v", err)
+	_ = c.closeLocked()
+
+	reconnCtx, reconnCancel := context.WithTimeout(ctx, DefaultDialTimeout)
+	defer reconnCancel()
+
+	if err := c.connectLocked(reconnCtx); err != nil {
+		return fmt.Errorf("reconnection failed: %w", err)
+	}
+
+	return fn(ctx)
+}
+
+// isConnectionError checks if an error indicates a connection problem that warrants retry.
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrNotConnected) {
+		return true
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection") ||
+		strings.Contains(errStr, "transport") ||
+		strings.Contains(errStr, "EOF")
 }
 
 // GetProxyHistory retrieves proxy HTTP history entries.
@@ -178,56 +316,55 @@ func (c *BurpClient) GetProxyHistory(ctx context.Context, count, offset int) ([]
 
 // GetProxyHistoryRaw retrieves proxy HTTP history as raw text (for debugging).
 func (c *BurpClient) GetProxyHistoryRaw(ctx context.Context, count, offset int) (string, error) {
-	if !c.connected.Load() {
-		return "", ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "get_proxy_http_history",
-			Arguments: map[string]interface{}{
-				"count":  count,
-				"offset": offset,
+	var raw string
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "get_proxy_http_history",
+				Arguments: map[string]interface{}{
+					"count":  count,
+					"offset": offset,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("get_proxy_http_history failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		raw = extractTextContent(result.Content)
+		return nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("get_proxy_http_history failed: %w", err)
-	}
-
-	if result.IsError {
-		return "", fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return extractTextContent(result.Content), nil
+	return raw, err
 }
 
 // GetProxyHistoryRegex retrieves filtered proxy HTTP history entries.
 // The regex uses Java regex syntax and matches against full request+response.
 func (c *BurpClient) GetProxyHistoryRegex(ctx context.Context, regex string, count, offset int) ([]ProxyHistoryEntry, error) {
-	if !c.connected.Load() {
-		return nil, ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "get_proxy_http_history_regex",
-			Arguments: map[string]interface{}{
-				"regex":  regex,
-				"count":  count,
-				"offset": offset,
+	var entries []ProxyHistoryEntry
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "get_proxy_http_history_regex",
+				Arguments: map[string]interface{}{
+					"regex":  regex,
+					"count":  count,
+					"offset": offset,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("get_proxy_http_history_regex failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		var parseErr error
+		entries, parseErr = parseHistoryNDJSON(extractTextContent(result.Content))
+		return parseErr
 	})
-	if err != nil {
-		return nil, fmt.Errorf("get_proxy_http_history_regex failed: %w", err)
-	}
-
-	if result.IsError {
-		return nil, fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return parseHistoryNDJSON(extractTextContent(result.Content))
+	return entries, err
 }
 
 // parseHistoryNDJSON parses NDJSON text from proxy history tools.
@@ -293,7 +430,6 @@ func fixInvalidEscapes(s string) string {
 
 	var result strings.Builder
 	result.Grow(len(s))
-
 	var i int
 	for i < len(s) {
 		if s[i] == '\\' && i+1 < len(s) {
@@ -388,159 +524,144 @@ func repairTruncatedJSON(s string) string {
 // SendHTTP1Request sends an HTTP/1.1 request through Burp and returns the response.
 // Note: This bypasses the proxy (direct from Burp) and does NOT appear in proxy history.
 func (c *BurpClient) SendHTTP1Request(ctx context.Context, params SendRequestParams) (string, error) {
-	if !c.connected.Load() {
-		return "", ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "send_http1_request",
-			Arguments: map[string]interface{}{
-				"content":        params.Content,
-				"targetHostname": params.TargetHostname,
-				"targetPort":     params.TargetPort,
-				"usesHttps":      params.UsesHTTPS,
+	var response string
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "send_http1_request",
+				Arguments: map[string]interface{}{
+					"content":        params.Content,
+					"targetHostname": params.TargetHostname,
+					"targetPort":     params.TargetPort,
+					"usesHttps":      params.UsesHTTPS,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("send_http1_request failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		response = extractTextContent(result.Content)
+		return nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("send_http1_request failed: %w", err)
-	}
-
-	if result.IsError {
-		return "", fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	// Response is a Kotlin toString() format, not JSON
-	return extractTextContent(result.Content), nil
+	return response, err
 }
 
 // CreateRepeaterTab creates a new Repeater tab in Burp with the specified request.
 func (c *BurpClient) CreateRepeaterTab(ctx context.Context, params RepeaterTabParams) error {
-	if !c.connected.Load() {
-		return ErrNotConnected
-	}
+	return c.withConn(ctx, func(opCtx context.Context) error {
+		args := map[string]interface{}{
+			"content":        params.Content,
+			"targetHostname": params.TargetHostname,
+			"targetPort":     params.TargetPort,
+			"usesHttps":      params.UsesHTTPS,
+		}
+		if params.TabName != "" {
+			args["tabName"] = params.TabName
+		}
 
-	args := map[string]interface{}{
-		"content":        params.Content,
-		"targetHostname": params.TargetHostname,
-		"targetPort":     params.TargetPort,
-		"usesHttps":      params.UsesHTTPS,
-	}
-	if params.TabName != "" {
-		args["tabName"] = params.TabName
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "create_repeater_tab",
-			Arguments: args,
-		},
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name:      "create_repeater_tab",
+				Arguments: args,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("create_repeater_tab failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("create_repeater_tab failed: %w", err)
-	}
-
-	if result.IsError {
-		return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return nil
 }
 
 // SetInterceptState enables or disables proxy intercept mode.
 func (c *BurpClient) SetInterceptState(ctx context.Context, intercepting bool) error {
-	if !c.connected.Load() {
-		return ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "set_proxy_intercept_state",
-			Arguments: map[string]interface{}{
-				"intercepting": intercepting,
+	return c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "set_proxy_intercept_state",
+				Arguments: map[string]interface{}{
+					"intercepting": intercepting,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("set_proxy_intercept_state failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("set_proxy_intercept_state failed: %w", err)
-	}
-
-	if result.IsError {
-		return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return nil
 }
 
 // SendHTTP2Request sends an HTTP/2 request through Burp and returns the response.
 // Note: This bypasses the proxy (direct from Burp) and does NOT appear in proxy history.
 func (c *BurpClient) SendHTTP2Request(ctx context.Context, params SendHTTP2RequestParams) (string, error) {
-	if !c.connected.Load() {
-		return "", ErrNotConnected
-	}
+	var response string
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		args := map[string]interface{}{
+			"targetHostname": params.TargetHostname,
+			"targetPort":     params.TargetPort,
+			"usesHttps":      params.UsesHTTPS,
+			"requestBody":    params.RequestBody,
+		}
+		if params.PseudoHeaders != nil {
+			args["pseudoHeaders"] = params.PseudoHeaders
+		}
+		if params.Headers != nil {
+			args["headers"] = params.Headers
+		}
 
-	args := map[string]interface{}{
-		"targetHostname": params.TargetHostname,
-		"targetPort":     params.TargetPort,
-		"usesHttps":      params.UsesHTTPS,
-		"requestBody":    params.RequestBody, // Required field, even if empty
-	}
-	if params.PseudoHeaders != nil {
-		args["pseudoHeaders"] = params.PseudoHeaders
-	}
-	if params.Headers != nil {
-		args["headers"] = params.Headers
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "send_http2_request",
-			Arguments: args,
-		},
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name:      "send_http2_request",
+				Arguments: args,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("send_http2_request failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		response = extractTextContent(result.Content)
+		return nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("send_http2_request failed: %w", err)
-	}
-
-	if result.IsError {
-		return "", fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return extractTextContent(result.Content), nil
+	return response, err
 }
 
 // SendToIntruder creates a new Intruder tab with the specified HTTP request.
 func (c *BurpClient) SendToIntruder(ctx context.Context, params IntruderParams) error {
-	if !c.connected.Load() {
-		return ErrNotConnected
-	}
+	return c.withConn(ctx, func(opCtx context.Context) error {
+		args := map[string]interface{}{
+			"content":        params.Content,
+			"targetHostname": params.TargetHostname,
+			"targetPort":     params.TargetPort,
+			"usesHttps":      params.UsesHTTPS,
+		}
+		if params.TabName != "" {
+			args["tabName"] = params.TabName
+		}
 
-	args := map[string]interface{}{
-		"content":        params.Content,
-		"targetHostname": params.TargetHostname,
-		"targetPort":     params.TargetPort,
-		"usesHttps":      params.UsesHTTPS,
-	}
-	if params.TabName != "" {
-		args["tabName"] = params.TabName
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "send_to_intruder",
-			Arguments: args,
-		},
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name:      "send_to_intruder",
+				Arguments: args,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("send_to_intruder failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("send_to_intruder failed: %w", err)
-	}
-
-	if result.IsError {
-		return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return nil
 }
 
 // GetProxyWebsocketHistory retrieves proxy WebSocket history entries.
@@ -554,55 +675,54 @@ func (c *BurpClient) GetProxyWebsocketHistory(ctx context.Context, count, offset
 
 // GetProxyWebsocketHistoryRaw retrieves proxy WebSocket history as raw text.
 func (c *BurpClient) GetProxyWebsocketHistoryRaw(ctx context.Context, count, offset int) (string, error) {
-	if !c.connected.Load() {
-		return "", ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "get_proxy_websocket_history",
-			Arguments: map[string]interface{}{
-				"count":  count,
-				"offset": offset,
+	var raw string
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "get_proxy_websocket_history",
+				Arguments: map[string]interface{}{
+					"count":  count,
+					"offset": offset,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("get_proxy_websocket_history failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		raw = extractTextContent(result.Content)
+		return nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("get_proxy_websocket_history failed: %w", err)
-	}
-
-	if result.IsError {
-		return "", fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return extractTextContent(result.Content), nil
+	return raw, err
 }
 
 // GetProxyWebsocketHistoryRegex retrieves filtered proxy WebSocket history entries.
 func (c *BurpClient) GetProxyWebsocketHistoryRegex(ctx context.Context, regex string, count, offset int) ([]WebSocketHistoryEntry, error) {
-	if !c.connected.Load() {
-		return nil, ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "get_proxy_websocket_history_regex",
-			Arguments: map[string]interface{}{
-				"regex":  regex,
-				"count":  count,
-				"offset": offset,
+	var entries []WebSocketHistoryEntry
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "get_proxy_websocket_history_regex",
+				Arguments: map[string]interface{}{
+					"regex":  regex,
+					"count":  count,
+					"offset": offset,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("get_proxy_websocket_history_regex failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		var parseErr error
+		entries, parseErr = parseWebsocketHistoryNDJSON(extractTextContent(result.Content))
+		return parseErr
 	})
-	if err != nil {
-		return nil, fmt.Errorf("get_proxy_websocket_history_regex failed: %w", err)
-	}
-
-	if result.IsError {
-		return nil, fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return parseWebsocketHistoryNDJSON(extractTextContent(result.Content))
+	return entries, err
 }
 
 // parseWebsocketHistoryNDJSON parses NDJSON text from WebSocket history.
@@ -643,75 +763,66 @@ func parseWebsocketHistoryNDJSON(text string) ([]WebSocketHistoryEntry, error) {
 // SetTaskExecutionEngineState starts or stops Burp's task execution engine.
 // When running=true, tasks will execute; when running=false, tasks are paused.
 func (c *BurpClient) SetTaskExecutionEngineState(ctx context.Context, running bool) error {
-	if !c.connected.Load() {
-		return ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "set_task_execution_engine_state",
-			Arguments: map[string]interface{}{
-				"running": running,
+	return c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "set_task_execution_engine_state",
+				Arguments: map[string]interface{}{
+					"running": running,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("set_task_execution_engine_state failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("set_task_execution_engine_state failed: %w", err)
-	}
-
-	if result.IsError {
-		return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return nil
 }
 
 // GetActiveEditorContents retrieves the contents of the user's active message editor.
 func (c *BurpClient) GetActiveEditorContents(ctx context.Context) (string, error) {
-	if !c.connected.Load() {
-		return "", ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "get_active_editor_contents",
-			Arguments: map[string]interface{}{},
-		},
+	var contents string
+	err := c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name:      "get_active_editor_contents",
+				Arguments: map[string]interface{}{},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("get_active_editor_contents failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		contents = extractTextContent(result.Content)
+		return nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("get_active_editor_contents failed: %w", err)
-	}
-
-	if result.IsError {
-		return "", fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return extractTextContent(result.Content), nil
+	return contents, err
 }
 
 // SetActiveEditorContents sets the contents of the user's active message editor.
 func (c *BurpClient) SetActiveEditorContents(ctx context.Context, text string) error {
-	if !c.connected.Load() {
-		return ErrNotConnected
-	}
-
-	result, err := c.mcpClient.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "set_active_editor_contents",
-			Arguments: map[string]interface{}{
-				"text": text,
+	return c.withConn(ctx, func(opCtx context.Context) error {
+		result, err := c.mcpClient.CallTool(opCtx, mcp.CallToolRequest{
+			Params: mcp.CallToolParams{
+				Name: "set_active_editor_contents",
+				Arguments: map[string]interface{}{
+					"text": text,
+				},
 			},
-		},
+		})
+		if err != nil {
+			return fmt.Errorf("set_active_editor_contents failed: %w", err)
+		}
+		if result.IsError {
+			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("set_active_editor_contents failed: %w", err)
-	}
-
-	if result.IsError {
-		return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
-	}
-
-	return nil
 }
 
 func extractTextContent(content []mcp.Content) string {

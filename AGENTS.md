@@ -40,7 +40,7 @@ make lint           # Run golangci-lint and go vet
 | `service/oast_handler.go` | Handles /oast/* endpoints |
 | `service/httputil.go` | HTTP parsing utilities |
 | `service/bundle.go` | Request bundle file operations |
-| `service/mcp/client.go` | SSE-based MCP client |
+| `service/mcp/burp.go` | SSE-based Burp Suite MCP client |
 | `service/mcp/types.go` | MCP-specific types |
 | `service/store/flow.go` | Flow ID → Burp offset mapping (thread-safe) |
 | `service/store/hash.go` | Content hashing for flow identity |

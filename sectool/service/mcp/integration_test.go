@@ -1,10 +1,8 @@
 package mcp
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,15 +14,14 @@ import (
 // Integration tests for Burp MCP client.
 // These tests will skip automatically if Burp is not available.
 
-func connectOrSkip(t *testing.T, ctx context.Context) *BurpClient {
+func connectOrSkip(t *testing.T) *BurpClient {
 	t.Helper()
 
 	// Acquire exclusive lock to prevent concurrent MCP connections across packages
 	_ = testutil.AcquireBurpLock(t)
 
 	client := New(config.DefaultBurpMCPURL)
-	err := client.Connect(ctx)
-	if err != nil {
+	if err := client.Connect(t.Context()); err != nil {
 		t.Skipf("Burp MCP not available at %s: %v", config.DefaultBurpMCPURL, err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
@@ -32,47 +29,35 @@ func connectOrSkip(t *testing.T, ctx context.Context) *BurpClient {
 }
 
 func TestBurpConnect(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	assert.True(t, client.IsConnected())
 	assert.Equal(t, config.DefaultBurpMCPURL, client.URL())
 }
 
 func TestBurpConnectTwice(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Second connect should be no-op
-	err := client.Connect(ctx)
+	err := client.Connect(t.Context())
 	require.NoError(t, err)
 	assert.True(t, client.IsConnected())
 }
 
 func TestBurpGetProxyHistory_Empty(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Fetch with moderately high offset to likely get empty results
 	// Using 9999 instead of 999999 to avoid potential performance issues with Burp MCP
-	entries, err := client.GetProxyHistory(ctx, 10, 9999)
+	entries, err := client.GetProxyHistory(t.Context(), 10, 9999)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
 func TestBurpGetProxyHistory_FirstPage(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	client := connectOrSkip(t)
 
-	client := connectOrSkip(t, ctx)
-
-	entries, err := client.GetProxyHistory(ctx, 5, 0)
+	entries, err := client.GetProxyHistory(t.Context(), 5, 0)
 	require.NoError(t, err)
 
 	t.Logf("Retrieved %d entries from first page", len(entries))
@@ -92,13 +77,10 @@ func TestBurpGetProxyHistory_FirstPage(t *testing.T) {
 }
 
 func TestBurpGetProxyHistory_Pagination(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Fetch first page
-	page1, err := client.GetProxyHistory(ctx, 3, 0)
+	page1, err := client.GetProxyHistory(t.Context(), 3, 0)
 	require.NoError(t, err)
 
 	if len(page1) < 3 {
@@ -106,7 +88,7 @@ func TestBurpGetProxyHistory_Pagination(t *testing.T) {
 	}
 
 	// Fetch second page
-	page2, err := client.GetProxyHistory(ctx, 3, 3)
+	page2, err := client.GetProxyHistory(t.Context(), 3, 3)
 	require.NoError(t, err)
 
 	t.Logf("Page 1: %d entries, Page 2: %d entries", len(page1), len(page2))
@@ -121,12 +103,9 @@ func TestBurpGetProxyHistory_Pagination(t *testing.T) {
 }
 
 func TestBurpGetProxyHistoryRaw(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	client := connectOrSkip(t)
 
-	client := connectOrSkip(t, ctx)
-
-	raw, err := client.GetProxyHistoryRaw(ctx, 2, 0)
+	raw, err := client.GetProxyHistoryRaw(t.Context(), 2, 0)
 	require.NoError(t, err)
 
 	t.Logf("Raw response length: %d bytes", len(raw))
@@ -138,25 +117,19 @@ func TestBurpGetProxyHistoryRaw(t *testing.T) {
 }
 
 func TestBurpGetProxyHistoryRegex_NoMatch(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Use a regex that's unlikely to match anything
-	entries, err := client.GetProxyHistoryRegex(ctx, "UNLIKELYTOMATCH12345XYZ", 10, 0)
+	entries, err := client.GetProxyHistoryRegex(t.Context(), "UNLIKELYTOMATCH12345XYZ", 10, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
 func TestBurpGetProxyHistoryRegex_MatchHTTP(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Match HTTP requests (very broad pattern)
-	entries, err := client.GetProxyHistoryRegex(ctx, "HTTP/1\\.[01]", 5, 0)
+	entries, err := client.GetProxyHistoryRegex(t.Context(), "HTTP/1\\.[01]", 5, 0)
 	require.NoError(t, err)
 
 	t.Logf("Regex matched %d entries", len(entries))
@@ -166,23 +139,18 @@ func TestBurpGetProxyHistoryRegex_MatchHTTP(t *testing.T) {
 }
 
 func TestBurpGetProxyHistoryRegex_MatchHost(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Match Host header
-	entries, err := client.GetProxyHistoryRegex(ctx, "Host:", 5, 0)
+	entries, err := client.GetProxyHistoryRegex(t.Context(), "Host:", 5, 0)
 	require.NoError(t, err)
 
 	t.Logf("Host header matched %d entries", len(entries))
 }
 
 func TestBurpSetInterceptState(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	ctx := t.Context()
+	client := connectOrSkip(t)
 
 	// Turn off interception
 	err := client.SetInterceptState(ctx, false)
@@ -197,10 +165,7 @@ func TestBurpSetInterceptState(t *testing.T) {
 }
 
 func TestBurpCreateRepeaterTab(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := RepeaterTabParams{
 		TabName:        "sectool-test",
@@ -209,15 +174,12 @@ func TestBurpCreateRepeaterTab(t *testing.T) {
 		TargetPort:     443,
 		UsesHTTPS:      true,
 	}
-	err := client.CreateRepeaterTab(ctx, params)
+	err := client.CreateRepeaterTab(t.Context(), params)
 	require.NoError(t, err)
 }
 
 func TestBurpCreateRepeaterTab_HTTP(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := RepeaterTabParams{
 		TabName:        "sectool-http-test",
@@ -226,15 +188,12 @@ func TestBurpCreateRepeaterTab_HTTP(t *testing.T) {
 		TargetPort:     80,
 		UsesHTTPS:      false,
 	}
-	err := client.CreateRepeaterTab(ctx, params)
+	err := client.CreateRepeaterTab(t.Context(), params)
 	require.NoError(t, err)
 }
 
 func TestBurpSendHTTP1Request(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := SendRequestParams{
 		Content:        "GET /get HTTP/1.1\r\nHost: httpbin.org\r\nUser-Agent: sectool-test\r\nConnection: close\r\n\r\n",
@@ -242,7 +201,7 @@ func TestBurpSendHTTP1Request(t *testing.T) {
 		TargetPort:     443,
 		UsesHTTPS:      true,
 	}
-	response, err := client.SendHTTP1Request(ctx, params)
+	response, err := client.SendHTTP1Request(t.Context(), params)
 	require.NoError(t, err)
 
 	t.Logf("Response length: %d bytes", len(response))
@@ -253,10 +212,7 @@ func TestBurpSendHTTP1Request(t *testing.T) {
 }
 
 func TestBurpSendHTTP1Request_HTTP(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := SendRequestParams{
 		Content:        "GET /get HTTP/1.1\r\nHost: httpbin.org\r\nUser-Agent: sectool-test\r\nConnection: close\r\n\r\n",
@@ -265,7 +221,7 @@ func TestBurpSendHTTP1Request_HTTP(t *testing.T) {
 		UsesHTTPS:      false,
 	}
 
-	response, err := client.SendHTTP1Request(ctx, params)
+	response, err := client.SendHTTP1Request(t.Context(), params)
 	require.NoError(t, err)
 
 	t.Logf("HTTP Response length: %d bytes", len(response))
@@ -273,10 +229,7 @@ func TestBurpSendHTTP1Request_HTTP(t *testing.T) {
 }
 
 func TestBurpSendHTTP1Request_POST(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	body := `{"test": "data"}`
 	params := SendRequestParams{
@@ -291,7 +244,7 @@ func TestBurpSendHTTP1Request_POST(t *testing.T) {
 		UsesHTTPS:      true,
 	}
 
-	response, err := client.SendHTTP1Request(ctx, params)
+	response, err := client.SendHTTP1Request(t.Context(), params)
 	require.NoError(t, err)
 
 	t.Logf("POST Response length: %d bytes", len(response))
@@ -301,38 +254,34 @@ func TestBurpSendHTTP1Request_POST(t *testing.T) {
 }
 
 func TestBurpCloseAndReconnect(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	_ = testutil.AcquireBurpLock(t)
 
 	client := New(config.DefaultBurpMCPURL)
-	err := client.Connect(ctx)
-	if err != nil {
+	if err := client.Connect(t.Context()); err != nil {
 		t.Skipf("Burp MCP not available: %v", err)
 	}
 
 	assert.True(t, client.IsConnected())
 
 	// Close
-	err = client.Close()
+	err := client.Close()
 	require.NoError(t, err)
 	assert.False(t, client.IsConnected())
 
-	// Reconnect
-	err = client.Connect(ctx)
-	require.NoError(t, err)
-	assert.True(t, client.IsConnected())
+	// Create new client for reconnection (old client is closed)
+	client2 := New(config.DefaultBurpMCPURL)
+	t.Cleanup(func() { _ = client2.Close() })
 
-	_ = client.Close()
+	err = client2.Connect(t.Context())
+	require.NoError(t, err)
+	assert.True(t, client2.IsConnected())
 }
 
 func TestBurpLargeHistoryFetch(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Fetch a larger batch to test buffer handling and JSON sanitization
-	entries, err := client.GetProxyHistory(ctx, 50, 0)
+	entries, err := client.GetProxyHistory(t.Context(), 50, 0)
 	require.NoError(t, err)
 
 	t.Logf("Large fetch returned %d entries", len(entries))
@@ -373,10 +322,7 @@ func itoa(n int) string {
 }
 
 func TestBurpSendHTTP2Request(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := SendHTTP2RequestParams{
 		PseudoHeaders: map[string]string{
@@ -392,7 +338,7 @@ func TestBurpSendHTTP2Request(t *testing.T) {
 		TargetPort:     443,
 		UsesHTTPS:      true,
 	}
-	response, err := client.SendHTTP2Request(ctx, params)
+	response, err := client.SendHTTP2Request(t.Context(), params)
 	require.NoError(t, err)
 
 	t.Logf("HTTP/2 Response length: %d bytes", len(response))
@@ -403,10 +349,7 @@ func TestBurpSendHTTP2Request(t *testing.T) {
 }
 
 func TestBurpSendToIntruder(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	params := IntruderParams{
 		TabName:        "sectool-intruder-test",
@@ -415,29 +358,23 @@ func TestBurpSendToIntruder(t *testing.T) {
 		TargetPort:     443,
 		UsesHTTPS:      true,
 	}
-	err := client.SendToIntruder(ctx, params)
+	err := client.SendToIntruder(t.Context(), params)
 	require.NoError(t, err)
 }
 
 func TestBurpGetProxyWebsocketHistory_Empty(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// Fetch with high offset to likely get empty results
-	entries, err := client.GetProxyWebsocketHistory(ctx, 10, 999999)
+	entries, err := client.GetProxyWebsocketHistory(t.Context(), 10, 999999)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
 func TestBurpGetProxyWebsocketHistory_FirstPage(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	client := connectOrSkip(t)
 
-	client := connectOrSkip(t, ctx)
-
-	entries, err := client.GetProxyWebsocketHistory(ctx, 10, 0)
+	entries, err := client.GetProxyWebsocketHistory(t.Context(), 10, 0)
 	require.NoError(t, err)
 
 	t.Logf("Retrieved %d WebSocket history entries", len(entries))
@@ -447,33 +384,25 @@ func TestBurpGetProxyWebsocketHistory_FirstPage(t *testing.T) {
 }
 
 func TestBurpGetProxyWebsocketHistoryRaw(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	client := connectOrSkip(t)
 
-	client := connectOrSkip(t, ctx)
-
-	raw, err := client.GetProxyWebsocketHistoryRaw(ctx, 5, 0)
+	raw, err := client.GetProxyWebsocketHistoryRaw(t.Context(), 5, 0)
 	require.NoError(t, err)
 
 	t.Logf("Raw WebSocket history length: %d bytes", len(raw))
 }
 
 func TestBurpGetProxyWebsocketHistoryRegex_NoMatch(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	t.Cleanup(cancel)
+	client := connectOrSkip(t)
 
-	client := connectOrSkip(t, ctx)
-
-	entries, err := client.GetProxyWebsocketHistoryRegex(ctx, "UNLIKELYTOMATCH12345XYZ", 10, 0)
+	entries, err := client.GetProxyWebsocketHistoryRegex(t.Context(), "UNLIKELYTOMATCH12345XYZ", 10, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
 func TestBurpSetTaskExecutionEngineState(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	ctx := t.Context()
+	client := connectOrSkip(t)
 
 	// Pause the engine (running=false)
 	err := client.SetTaskExecutionEngineState(ctx, false)
@@ -485,13 +414,10 @@ func TestBurpSetTaskExecutionEngineState(t *testing.T) {
 }
 
 func TestBurpGetActiveEditorContents(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// This may return empty or error if no editor is active
-	contents, err := client.GetActiveEditorContents(ctx)
+	contents, err := client.GetActiveEditorContents(t.Context())
 	if err != nil {
 		t.Logf("GetActiveEditorContents returned error (expected if no editor active): %v", err)
 		return
@@ -504,14 +430,11 @@ func TestBurpGetActiveEditorContents(t *testing.T) {
 }
 
 func TestBurpSetActiveEditorContents(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	t.Cleanup(cancel)
-
-	client := connectOrSkip(t, ctx)
+	client := connectOrSkip(t)
 
 	// This may fail if no editor is active
 	testContent := "GET /test HTTP/1.1\r\nHost: example.com\r\n\r\n"
-	err := client.SetActiveEditorContents(ctx, testContent)
+	err := client.SetActiveEditorContents(t.Context(), testContent)
 	if err != nil {
 		t.Logf("SetActiveEditorContents returned error (expected if no editor active): %v", err)
 		return

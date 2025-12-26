@@ -32,6 +32,9 @@ func NewBurpBackend(url string, opts ...mcp.Option) *BurpBackend {
 
 func (b *BurpBackend) Connect(ctx context.Context) error {
 	log.Printf("burp: connecting to MCP at %s", b.client.URL())
+	b.client.OnConnectionLost(func(err error) {
+		log.Printf("Burp MCP connection lost: %v", err)
+	})
 	if err := b.client.Connect(ctx); err != nil {
 		log.Printf("burp: connection failed: %v", err)
 		return err
@@ -44,77 +47,12 @@ func (b *BurpBackend) Close() error {
 	return b.client.Close()
 }
 
-func (b *BurpBackend) OnConnectionLost(handler func(error)) {
-	b.client.OnConnectionLost(handler)
-}
-
-// ensureConnected checks if the client is connected and attempts reconnection if not.
-// Uses a fresh context to avoid issues with already-cancelled parent context.
-func (b *BurpBackend) ensureConnected(ctx context.Context) error {
-	if b.client.IsConnected() {
-		return nil
-	}
-	return b.forceReconnect()
-}
-
-// forceReconnect closes any existing connection and establishes a new one.
-// Used when we know the connection is dead (e.g., after a connection error).
-func (b *BurpBackend) forceReconnect() error {
-	log.Printf("burp: connection lost, attempting reconnection...")
-
-	// Close existing connection first to ensure clean state
-	_ = b.client.Close()
-
-	// Use a fresh context for reconnection - the original context may be cancelled
-	// which would cause reconnection to fail immediately.
-	reconnCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := b.client.Connect(reconnCtx); err != nil {
-		return fmt.Errorf("reconnection failed: %w", err)
-	}
-	log.Printf("burp: reconnected successfully")
-	return nil
-}
-
-// isConnectionError checks if an error indicates a connection problem that warrants retry.
-func isConnectionError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, mcp.ErrNotConnected) {
-		return true
-	}
-	// Check for common connection-related error patterns
-	errStr := err.Error()
-	return strings.Contains(errStr, "connection") ||
-		strings.Contains(errStr, "transport") ||
-		strings.Contains(errStr, "EOF") ||
-		strings.Contains(errStr, "context canceled") ||
-		strings.Contains(errStr, "deadline exceeded")
-}
-
 func (b *BurpBackend) GetProxyHistory(ctx context.Context, count int, offset uint32) ([]ProxyEntry, error) {
-	// Ensure connected before operation
-	if err := b.ensureConnected(ctx); err != nil {
-		return nil, err
-	}
+	log.Printf("burp: sending proxy history offset: %d", offset)
 
 	entries, err := b.client.GetProxyHistory(ctx, count, int(offset))
 	if err != nil {
-		// On connection error, force reconnection and retry once
-		if isConnectionError(err) {
-			log.Printf("burp: GetProxyHistory failed with connection error, retrying: %v", err)
-			if reconnErr := b.forceReconnect(); reconnErr != nil {
-				return nil, err // return original error
-			}
-			entries, err = b.client.GetProxyHistory(ctx, count, int(offset))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	return convertMCPEntries(entries), nil
 }
@@ -140,31 +78,16 @@ func (b *BurpBackend) SendRequest(ctx context.Context, name string, req SendRequ
 	log.Printf("burp: sending request %s to %s://%s:%d (follow_redirects=%v)",
 		name, scheme, req.Target.Hostname, req.Target.Port, req.FollowRedirects)
 
-	// Ensure connected before operation
-	if err := b.ensureConnected(ctx); err != nil {
-		return nil, err
-	}
-
-	// Apply timeout if specified
 	if req.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
 		defer cancel()
 	}
 
-	result, err := b.doSendRequest(ctx, name, req)
-	if err != nil && isConnectionError(err) {
-		// Force reconnection and retry once
-		log.Printf("burp: SendRequest failed with connection error, retrying: %v", err)
-		if reconnErr := b.forceReconnect(); reconnErr != nil {
-			return nil, err // return original error
-		}
-		return b.doSendRequest(ctx, name, req)
-	}
-	return result, err
+	return b.doSendRequest(ctx, name, req)
 }
 
-// doSendRequest performs the actual request sending (without reconnection logic).
+// doSendRequest performs the actual request sending.
 func (b *BurpBackend) doSendRequest(ctx context.Context, name string, req SendRequestInput) (*SendRequestResult, error) {
 	err := b.client.CreateRepeaterTab(ctx, mcp.RepeaterTabParams{
 		TabName:        name,
@@ -514,10 +437,4 @@ func parseBurpResponse(raw string) (headers, body []byte, err error) {
 // This is not part of the HttpBackend interface as it's Burp-specific.
 func (b *BurpBackend) SetInterceptState(ctx context.Context, intercepting bool) error {
 	return b.client.SetInterceptState(ctx, intercepting)
-}
-
-// CreateRepeaterTab exposes Burp-specific Repeater functionality.
-// This is not part of the HttpBackend interface as it's Burp-specific.
-func (b *BurpBackend) CreateRepeaterTab(ctx context.Context, params mcp.RepeaterTabParams) error {
-	return b.client.CreateRepeaterTab(ctx, params)
 }

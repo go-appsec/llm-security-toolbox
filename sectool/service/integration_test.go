@@ -21,8 +21,7 @@ func connectBurpOrSkip(t *testing.T) *mcp.BurpClient {
 	_ = testutil.AcquireBurpLock(t)
 
 	client := mcp.New(config.DefaultBurpMCPURL)
-	err := client.Connect(t.Context())
-	if err != nil {
+	if err := client.Connect(t.Context()); err != nil {
 		t.Skipf("Burp MCP not available at %s: %v", config.DefaultBurpMCPURL, err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
