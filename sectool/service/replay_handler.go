@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -228,13 +227,6 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate stdin usage - can't read both file and body from stdin
-	if req.FilePath == "-" && req.BodyPath == "-" {
-		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest,
-			"cannot read both file and body from stdin", "use stdin for file OR body, not both")
-		return
-	}
-
 	ctx := r.Context()
 
 	// Resolve input, tracking original body size for bundles to detect modifications
@@ -282,15 +274,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 	case req.FilePath != "":
 		inputSource = "file:" + req.FilePath
-		// Read raw file
-		var fileContent []byte
-		var err error
-
-		if req.FilePath == "-" {
-			fileContent, err = io.ReadAll(os.Stdin)
-		} else {
-			fileContent, err = os.ReadFile(req.FilePath)
-		}
+		fileContent, err := os.ReadFile(req.FilePath)
 		if err != nil {
 			s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "failed to read file", err.Error())
 			return
@@ -298,15 +282,10 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 		var body []byte
 		if req.BodyPath != "" {
-			var bodyErr error
-			if req.BodyPath == "-" {
-				body, bodyErr = io.ReadAll(os.Stdin)
-			} else {
-				body, bodyErr = os.ReadFile(req.BodyPath)
-			}
-			if bodyErr != nil {
+			body, err = os.ReadFile(req.BodyPath)
+			if err != nil {
 				s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest,
-					"failed to read body file", bodyErr.Error())
+					"failed to read body file", err.Error())
 				return
 			}
 		}

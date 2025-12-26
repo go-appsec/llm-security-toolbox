@@ -3,8 +3,11 @@ package replay
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jentfoo/llm-security-toolbox/sectool/service"
@@ -14,9 +17,48 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// Validate stdin usage early
+	if file == "-" && body == "-" {
+		return errors.New("cannot read both file and body from stdin")
+	}
+
 	workDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Handle stdin by writing to temp files
+	requestsDir := filepath.Join(workDir, ".sectool", "requests")
+	if file == "-" || body == "-" {
+		if err := os.MkdirAll(requestsDir, 0700); err != nil {
+			return fmt.Errorf("failed to create requests directory: %w", err)
+		}
+	}
+
+	if file == "-" {
+		content, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("failed to read from stdin: %w", err)
+		}
+		tmpPath := filepath.Join(requestsDir, fmt.Sprintf("temp-%d.req", time.Now().Unix()))
+		if err := os.WriteFile(tmpPath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write temp file: %w", err)
+		}
+		defer func() { _ = os.Remove(tmpPath) }()
+		file = tmpPath
+	}
+
+	if body == "-" {
+		content, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("failed to read body from stdin: %w", err)
+		}
+		tmpPath := filepath.Join(requestsDir, fmt.Sprintf("temp-%d.body", time.Now().Unix()))
+		if err := os.WriteFile(tmpPath, content, 0600); err != nil {
+			return fmt.Errorf("failed to write temp body file: %w", err)
+		}
+		defer func() { _ = os.Remove(tmpPath) }()
+		body = tmpPath
 	}
 
 	client := service.NewClient(workDir, service.WithTimeout(timeout))
