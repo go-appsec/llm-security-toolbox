@@ -271,9 +271,8 @@ type ReplayGetResponse struct {
 
 // OastCreateResponse is the response for POST /oast/create.
 type OastCreateResponse struct {
-	OastID   string   `json:"oast_id"`
-	Domain   string   `json:"domain"`
-	Examples []string `json:"examples,omitempty"`
+	OastID string `json:"oast_id"`
+	Domain string `json:"domain"`
 }
 
 // OastPollRequest is the request for POST /oast/poll.
@@ -309,6 +308,23 @@ type OastSession struct {
 	OastID    string `json:"oast_id"`
 	Domain    string `json:"domain"`
 	CreatedAt string `json:"created_at"`
+}
+
+// OastGetRequest is the request for POST /oast/get.
+type OastGetRequest struct {
+	OastID  string `json:"oast_id"`
+	EventID string `json:"event_id"`
+}
+
+// OastGetResponse is the response for POST /oast/get.
+// Returns full event details without truncation.
+type OastGetResponse struct {
+	EventID   string                 `json:"event_id"`
+	Time      string                 `json:"time"`
+	Type      string                 `json:"type"`
+	SourceIP  string                 `json:"source_ip"`
+	Subdomain string                 `json:"subdomain"`
+	Details   map[string]interface{} `json:"details,omitempty"`
 }
 
 // OastDeleteRequest is the request for POST /oast/delete.

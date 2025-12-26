@@ -29,13 +29,13 @@ func status(timeout time.Duration) error {
 	fmt.Println()
 
 	if st.Running {
-		fmt.Println("**Status**: Running")
+		fmt.Println("Status: Running")
 		if st.PID > 0 {
-			fmt.Printf("**PID**: %d\n", st.PID)
+			fmt.Printf("PID: %d\n", st.PID)
 		}
 		if st.Health != nil {
-			fmt.Printf("**Version**: %s\n", st.Health.Version)
-			fmt.Printf("**Started At**: %s\n", st.Health.StartedAt)
+			fmt.Printf("Version: %s\n", st.Health.Version)
+			fmt.Printf("Started At: %s\n", st.Health.StartedAt)
 			if len(st.Health.Metrics) > 0 {
 				fmt.Println()
 				fmt.Println("### Metrics")
@@ -45,11 +45,11 @@ func status(timeout time.Duration) error {
 			}
 		}
 	} else {
-		fmt.Println("**Status**: Not running")
+		fmt.Println("Status: Not running")
 	}
 
 	fmt.Println()
-	fmt.Printf("**Socket Path**: `%s`\n", st.SocketPath)
+	fmt.Printf("Socket Path: `%s`\n", st.SocketPath)
 
 	return nil
 }

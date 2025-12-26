@@ -247,6 +247,204 @@ func TestHandleOastPoll(t *testing.T) {
 	})
 }
 
+func TestHandleOastGet(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing_oast_id", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{})
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.False(t, resp.OK)
+		assert.Equal(t, ErrCodeInvalidRequest, resp.Error.Code)
+		assert.Contains(t, resp.Error.Message, "oast_id")
+	})
+
+	t.Run("missing_event_id", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{OastID: "test123"})
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.False(t, resp.OK)
+		assert.Equal(t, ErrCodeInvalidRequest, resp.Error.Code)
+		assert.Contains(t, resp.Error.Message, "event_id")
+	})
+
+	t.Run("session_not_found", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+			OastID:  "nonexistent",
+			EventID: "event1",
+		})
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.False(t, resp.OK)
+		assert.Equal(t, ErrCodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("event_not_found", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		backend := srv.oastBackend.(*InteractshBackend)
+		sess := &oastSession{
+			info: OastSessionInfo{
+				ID:        "testget",
+				Domain:    "get.oast.fun",
+				CreatedAt: time.Now(),
+			},
+			stopPolling: make(chan struct{}),
+			events: []OastEventInfo{
+				{ID: "e1", Time: time.Now(), Type: "dns"},
+			},
+		}
+		backend.mu.Lock()
+		backend.sessions["testget"] = sess
+		backend.byDomain["get.oast.fun"] = "testget"
+		backend.mu.Unlock()
+		defer func() {
+			backend.mu.Lock()
+			delete(backend.sessions, "testget")
+			delete(backend.byDomain, "get.oast.fun")
+			backend.mu.Unlock()
+		}()
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+			OastID:  "testget",
+			EventID: "nonexistent",
+		})
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.False(t, resp.OK)
+		assert.Equal(t, ErrCodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("returns_full_event_details", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		eventTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+		rawRequest := "GET / HTTP/1.1\r\nHost: sqli-test.get.oast.fun\r\nUser-Agent: curl/8.0.1\r\nAccept: */*\r\nX-Payload: ' OR '1'='1"
+
+		backend := srv.oastBackend.(*InteractshBackend)
+		sess := &oastSession{
+			info: OastSessionInfo{
+				ID:        "testfull",
+				Domain:    "full.oast.fun",
+				CreatedAt: time.Now(),
+			},
+			stopPolling: make(chan struct{}),
+			events: []OastEventInfo{
+				{
+					ID:        "evt123",
+					Time:      eventTime,
+					Type:      "http",
+					SourceIP:  "192.168.1.100",
+					Subdomain: "sqli-test.full.oast.fun",
+					Details: map[string]interface{}{
+						"raw_request":  rawRequest,
+						"raw_response": "HTTP/1.1 200 OK",
+					},
+				},
+			},
+		}
+		backend.mu.Lock()
+		backend.sessions["testfull"] = sess
+		backend.byDomain["full.oast.fun"] = "testfull"
+		backend.mu.Unlock()
+		defer func() {
+			backend.mu.Lock()
+			delete(backend.sessions, "testfull")
+			delete(backend.byDomain, "full.oast.fun")
+			backend.mu.Unlock()
+		}()
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+			OastID:  "testfull",
+			EventID: "evt123",
+		})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var getResp OastGetResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &getResp))
+
+		assert.Equal(t, "evt123", getResp.EventID)
+		assert.Equal(t, "2024-06-15T10:30:00Z", getResp.Time)
+		assert.Equal(t, "http", getResp.Type)
+		assert.Equal(t, "192.168.1.100", getResp.SourceIP)
+		assert.Equal(t, "sqli-test.full.oast.fun", getResp.Subdomain)
+		assert.Equal(t, rawRequest, getResp.Details["raw_request"])
+		assert.Equal(t, "HTTP/1.1 200 OK", getResp.Details["raw_response"])
+	})
+
+	t.Run("get_by_domain", func(t *testing.T) {
+		srv, _, cleanup := testServerWithMCP(t)
+		t.Cleanup(cleanup)
+
+		backend := srv.oastBackend.(*InteractshBackend)
+		sess := &oastSession{
+			info: OastSessionInfo{
+				ID:        "testdom",
+				Domain:    "domain.oast.fun",
+				CreatedAt: time.Now(),
+			},
+			stopPolling: make(chan struct{}),
+			events: []OastEventInfo{
+				{ID: "e1", Time: time.Now(), Type: "dns", SourceIP: "1.2.3.4"},
+			},
+		}
+		backend.mu.Lock()
+		backend.sessions["testdom"] = sess
+		backend.byDomain["domain.oast.fun"] = "testdom"
+		backend.mu.Unlock()
+		defer func() {
+			backend.mu.Lock()
+			delete(backend.sessions, "testdom")
+			delete(backend.byDomain, "domain.oast.fun")
+			backend.mu.Unlock()
+		}()
+
+		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+			OastID:  "domain.oast.fun",
+			EventID: "e1",
+		})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var getResp OastGetResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &getResp))
+		assert.Equal(t, "e1", getResp.EventID)
+		assert.Equal(t, "1.2.3.4", getResp.SourceIP)
+	})
+}
+
 func TestHandleOastList(t *testing.T) {
 	t.Parallel()
 

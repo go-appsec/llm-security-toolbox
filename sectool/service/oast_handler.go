@@ -24,9 +24,8 @@ func (s *Server) handleOastCreate(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("oast/create: created session %s with domain %s", sess.ID, sess.Domain)
 	resp := OastCreateResponse{
-		OastID:   sess.ID,
-		Domain:   sess.Domain,
-		Examples: sess.Examples,
+		OastID: sess.ID,
+		Domain: sess.Domain,
 	}
 	s.writeJSON(w, http.StatusOK, resp)
 }
@@ -81,6 +80,39 @@ func (s *Server) handleOastPoll(w http.ResponseWriter, r *http.Request) {
 	resp := OastPollResponse{
 		Events:       events,
 		DroppedCount: result.DroppedCount,
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleOastGet handles POST /oast/get
+func (s *Server) handleOastGet(w http.ResponseWriter, r *http.Request) {
+	var req OastGetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "invalid request body", err.Error())
+		return
+	} else if req.OastID == "" {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "oast_id is required", "")
+		return
+	} else if req.EventID == "" {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "event_id is required", "")
+		return
+	}
+
+	log.Printf("oast/get: getting event %s from session %s", req.EventID, req.OastID)
+	event, err := s.oastBackend.GetEvent(r.Context(), req.OastID, req.EventID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "session or event not found", err.Error())
+		return
+	}
+
+	log.Printf("oast/get: returning event %s", req.EventID)
+	resp := OastGetResponse{
+		EventID:   event.ID,
+		Time:      event.Time.UTC().Format(time.RFC3339),
+		Type:      event.Type,
+		SourceIP:  event.SourceIP,
+		Subdomain: event.Subdomain,
+		Details:   event.Details,
 	}
 	s.writeJSON(w, http.StatusOK, resp)
 }

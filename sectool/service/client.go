@@ -354,6 +354,15 @@ func (c *Client) OastPoll(ctx context.Context, req *OastPollRequest) (*OastPollR
 	return &resp, nil
 }
 
+// OastGet retrieves full details for a specific OAST event.
+func (c *Client) OastGet(ctx context.Context, req *OastGetRequest) (*OastGetResponse, error) {
+	var resp OastGetResponse
+	if err := c.doJSONRequest(ctx, "/oast/get", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // OastList lists active OAST sessions.
 func (c *Client) OastList(ctx context.Context) (*OastListResponse, error) {
 	var resp OastListResponse

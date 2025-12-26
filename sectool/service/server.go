@@ -299,6 +299,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("POST /oast/create", s.handleOastCreate)
 	mux.HandleFunc("POST /oast/poll", s.handleOastPoll)
+	mux.HandleFunc("POST /oast/get", s.handleOastGet)
 	mux.HandleFunc("POST /oast/list", s.handleOastList)
 	mux.HandleFunc("POST /oast/delete", s.handleOastDelete)
 

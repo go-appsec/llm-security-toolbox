@@ -80,11 +80,6 @@ func (b *InteractshBackend) CreateSession(ctx context.Context) (*OastSessionInfo
 			ID:        sessionID,
 			Domain:    domain,
 			CreatedAt: time.Now(),
-			Examples: []string{
-				"DNS: nslookup test." + domain,
-				"HTTP: curl https://" + domain,
-				"Tagged: curl https://sqli-test." + domain,
-			},
 		},
 		client:      c,
 		stopPolling: make(chan struct{}),
@@ -238,6 +233,30 @@ func (s *oastSession) filterEvents(since string) []OastEventInfo {
 
 	// Event ID not found - return all events
 	return s.events
+}
+
+func (b *InteractshBackend) GetEvent(ctx context.Context, idOrDomain string, eventID string) (*OastEventInfo, error) {
+	sess, err := b.resolveSession(idOrDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+
+	if sess.stopped {
+		return nil, errors.New("session has been deleted")
+	}
+
+	for _, e := range sess.events {
+		if e.ID == eventID {
+			// Return a copy to avoid holding the lock
+			eventCopy := e
+			return &eventCopy, nil
+		}
+	}
+
+	return nil, fmt.Errorf("event not found: %s", eventID)
 }
 
 func (b *InteractshBackend) ListSessions(ctx context.Context) ([]OastSessionInfo, error) {

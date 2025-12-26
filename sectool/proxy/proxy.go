@@ -123,7 +123,7 @@ func export(timeout time.Duration, flowID, out string) error {
 
 	// Output result
 	fmt.Printf("Exported flow `%s` to bundle `%s`\n\n", flowID, resp.BundleID)
-	fmt.Printf("**Bundle path:** `%s`\n\n", resp.BundlePath)
+	fmt.Printf("Bundle path: `%s`\n\n", resp.BundlePath)
 	fmt.Println("Files created:")
 	fmt.Println("- `request.http` - HTTP headers with body placeholder")
 	fmt.Println("- `body.bin` - Request body (edit for modifications)")

@@ -94,19 +94,19 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 
 	// Output result as markdown
 	fmt.Printf("## Replay Result\n\n")
-	fmt.Printf("**Replay ID:** `%s`\n", resp.ReplayID)
-	fmt.Printf("**Duration:** %s\n\n", resp.Duration)
+	fmt.Printf("Replay ID: `%s`\n", resp.ReplayID)
+	fmt.Printf("Duration: %s\n\n", resp.Duration)
 
 	fmt.Printf("### Response\n\n")
-	fmt.Printf("**Status:** %d %s\n", resp.Status, resp.StatusLine)
-	fmt.Printf("**Size:** %d bytes\n\n", resp.RespSize)
+	fmt.Printf("Status: %d %s\n", resp.Status, resp.StatusLine)
+	fmt.Printf("Size: %d bytes\n\n", resp.RespSize)
 
 	if resp.RespHeaders != "" {
-		fmt.Printf("**Headers:**\n```\n%s```\n\n", resp.RespHeaders)
+		fmt.Printf("Headers:\n```\n%s```\n\n", resp.RespHeaders)
 	}
 
 	if resp.RespPreview != "" {
-		fmt.Printf("**Body Preview:**\n```\n%s\n```\n", resp.RespPreview)
+		fmt.Printf("Body Preview:\n```\n%s\n```\n", resp.RespPreview)
 	}
 
 	return nil
@@ -135,21 +135,21 @@ func get(timeout time.Duration, replayID string) error {
 
 	// Output result as markdown
 	fmt.Printf("## Replay Details\n\n")
-	fmt.Printf("**Replay ID:** `%s`\n", resp.ReplayID)
-	fmt.Printf("**Duration:** %s\n", resp.Duration)
-	fmt.Printf("**Status:** %d %s\n", resp.Status, resp.StatusLine)
-	fmt.Printf("**Size:** %d bytes\n\n", resp.RespSize)
+	fmt.Printf("Replay ID: `%s`\n", resp.ReplayID)
+	fmt.Printf("Duration: %s\n", resp.Duration)
+	fmt.Printf("Status: %d %s\n", resp.Status, resp.StatusLine)
+	fmt.Printf("Size: %d bytes\n\n", resp.RespSize)
 
 	if resp.RespHeaders != "" {
-		fmt.Printf("**Headers:**\n```\n%s```\n\n", resp.RespHeaders)
+		fmt.Printf("Headers:\n```\n%s```\n\n", resp.RespHeaders)
 	}
 
 	if resp.RespBody != "" {
 		body, err := base64.StdEncoding.DecodeString(resp.RespBody)
 		if err != nil {
-			fmt.Printf("**Body:** (failed to decode: %v)\n", err)
+			fmt.Printf("Body: (failed to decode: %v)\n", err)
 		} else {
-			fmt.Printf("**Body:**\n```\n%s\n```\n", string(body))
+			fmt.Printf("Body:\n```\n%s\n```\n", string(body))
 		}
 	}
 

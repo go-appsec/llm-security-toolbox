@@ -35,7 +35,7 @@ func Parse(args []string) error {
 func printUsage() {
 	fmt.Fprint(os.Stderr, `Usage: sectool replay <command> [options]
 
-Replay HTTP requests through Burp.
+Replay HTTP requests through the proxy.
 
 Commands:
   send       Send a request (from flow, bundle, or file)
@@ -74,7 +74,7 @@ func parseSend(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: sectool replay send [options]
 
-Send a request through Burp Repeater.
+Send a request through the HTTP backend.
 
 Input sources (exactly one required):
   --flow <flow_id>      Replay from proxy history (get flow_id from 'sectool proxy list')

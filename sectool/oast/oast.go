@@ -29,17 +29,10 @@ func create(timeout time.Duration) error {
 		return fmt.Errorf("oast create failed: %w", err)
 	}
 
-	// Format output as markdown
 	fmt.Println("## OAST Session Created")
 	fmt.Println()
-	fmt.Printf("**ID:** `%s`\n", resp.OastID)
-	fmt.Printf("**Domain:** `%s`\n", resp.Domain)
-	fmt.Println()
-	fmt.Println("### Usage Examples")
-	fmt.Println()
-	for _, example := range resp.Examples {
-		fmt.Printf("- `%s`\n", example)
-	}
+	fmt.Printf("ID: `%s`\n", resp.OastID)
+	fmt.Printf("Domain: `%s`\n", resp.Domain)
 	fmt.Println()
 	fmt.Println("Use any subdomain for tagging (e.g., `sqli-test." + resp.Domain + "`)")
 	fmt.Println()
@@ -73,7 +66,7 @@ func poll(timeout time.Duration, oastID, since string, wait time.Duration) error
 		return fmt.Errorf("oast poll failed: %w", err)
 	}
 
-	// Format output as markdown
+	// Format output as markdown table
 	if len(resp.Events) == 0 {
 		fmt.Println("No events received.")
 		if resp.DroppedCount > 0 {
@@ -82,39 +75,97 @@ func poll(timeout time.Duration, oastID, since string, wait time.Duration) error
 		return nil
 	}
 
-	fmt.Printf("## OAST Events (%d)\n\n", len(resp.Events))
-
+	fmt.Println("| event_id | time | type | source_ip | subdomain |")
+	fmt.Println("|----------|------|------|-----------|-----------|")
 	for _, event := range resp.Events {
-		fmt.Printf("### Event `%s` [%s]\n\n", event.EventID, strings.ToUpper(event.Type))
-		fmt.Printf("- **Time:** %s\n", event.Time)
-		fmt.Printf("- **Source IP:** %s\n", event.SourceIP)
-		fmt.Printf("- **Subdomain:** `%s`\n", event.Subdomain)
-
-		if len(event.Details) > 0 {
-			fmt.Println("\n**Details:**")
-			for k, v := range event.Details {
-				if s, ok := v.(string); ok && len(s) > 200 {
-					fmt.Printf("- %s: (truncated, %d bytes)\n", k, len(s))
-				} else {
-					fmt.Printf("- %s: %v\n", k, v)
-				}
-			}
-		}
-		fmt.Println()
+		fmt.Printf("| %s | %s | %s | %s | %s |\n",
+			event.EventID,
+			event.Time,
+			strings.ToUpper(event.Type),
+			event.SourceIP,
+			escapeMarkdown(event.Subdomain),
+		)
 	}
+	fmt.Printf("\n*%d event(s)*\n", len(resp.Events))
 
 	if resp.DroppedCount > 0 {
-		fmt.Printf("*Note: %d events were dropped due to buffer limit*\n", resp.DroppedCount)
+		fmt.Printf("\n*Note: %d events were dropped due to buffer limit*\n", resp.DroppedCount)
 	}
 
-	// Show hint for --since last
+	// Show hints for next actions
+	fmt.Printf("\nTo view event details: `sectool oast get %s <event_id>`\n", oastID)
 	if len(resp.Events) > 0 {
 		lastEvent := resp.Events[len(resp.Events)-1]
-		fmt.Printf("\nTo poll for new events: `sectool oast poll %s --since last`\n", oastID)
+		fmt.Printf("To poll for new events: `sectool oast poll %s --since last`\n", oastID)
 		fmt.Printf("Or after specific event: `sectool oast poll %s --since %s`\n", oastID, lastEvent.EventID)
 	}
 
 	return nil
+}
+
+func escapeMarkdown(s string) string {
+	s = strings.ReplaceAll(s, "|", "\\|")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
+
+func get(timeout time.Duration, oastID, eventID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	client := service.NewClient(workDir, service.WithTimeout(timeout))
+	if err := client.EnsureService(ctx); err != nil {
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+	}
+
+	resp, err := client.OastGet(ctx, &service.OastGetRequest{
+		OastID:  oastID,
+		EventID: eventID,
+	})
+	if err != nil {
+		return fmt.Errorf("oast get failed: %w", err)
+	}
+
+	// Format output as markdown
+	fmt.Printf("## OAST Event `%s`\n\n", resp.EventID)
+	fmt.Printf("- Time: %s\n", resp.Time)
+	fmt.Printf("- Type: %s\n", strings.ToUpper(resp.Type))
+	fmt.Printf("- Source IP: %s\n", resp.SourceIP)
+	fmt.Printf("- Subdomain: `%s`\n", resp.Subdomain)
+
+	if len(resp.Details) > 0 {
+		fmt.Println()
+		for k, v := range resp.Details {
+			if s, ok := v.(string); ok && len(s) > 0 {
+				fmt.Printf("### %s\n\n", formatDetailKey(k))
+				fmt.Println("```")
+				fmt.Println(s)
+				fmt.Println("```")
+			} else {
+				fmt.Printf("%s: %v\n", formatDetailKey(k), v)
+			}
+		}
+	}
+
+	return nil
+}
+
+func formatDetailKey(key string) string {
+	// Convert snake_case to Title Case
+	key = strings.ReplaceAll(key, "_", " ")
+	words := strings.Fields(key)
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func list(timeout time.Duration) error {

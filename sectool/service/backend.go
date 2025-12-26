@@ -65,6 +65,10 @@ type OastBackend interface {
 	// wait specifies how long to block waiting for events (0 = return immediately).
 	PollSession(ctx context.Context, idOrDomain string, since string, wait time.Duration) (*OastPollResultInfo, error)
 
+	// GetEvent retrieves a single event by ID from a session.
+	// Returns the full event details without truncation.
+	GetEvent(ctx context.Context, idOrDomain string, eventID string) (*OastEventInfo, error)
+
 	// ListSessions returns all active sessions.
 	ListSessions(ctx context.Context) ([]OastSessionInfo, error)
 
@@ -82,7 +86,6 @@ type OastSessionInfo struct {
 	ID        string    // Short sectool ID (e.g., "a1b2c3")
 	Domain    string    // Full Interactsh domain (e.g., "xyz123.oast.fun")
 	CreatedAt time.Time // When the session was created
-	Examples  []string  // Usage examples for LLM
 }
 
 // OastEventInfo represents a captured out-of-band interaction (internal domain type).
