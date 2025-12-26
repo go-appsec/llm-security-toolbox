@@ -55,5 +55,4 @@ Work with the agent to build a test plan and execute it together. The agent can 
 - **Request export and replay** - Export requests to disk, edit them, and replay with modifications
 - **OAST testing** - Create out-of-band domains and poll for DNS/HTTP/SMTP interactions via Interactsh
 - **Encoding utilities** - URL, Base64, and HTML entity encoding/decoding
-- **Automatic service management** - Per-directory background service handles backend connections
-- **LLM-optimized output** - All output formatted in markdown for agent consumption
+- **LLM-optimized** - CLI interactions optimized for agent usage
