@@ -13,7 +13,7 @@ import (
 
 func TestBurpNotConnected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := New(config.DefaultBurpMCPURL)
 
@@ -62,6 +62,11 @@ func TestSanitizeBurpJSON(t *testing.T) {
 			input: `{"request":"GET /","response":"200","notes":"test`,
 			want:  `{"request":"GET /","response":"200","notes":"test"}`,
 		},
+		{
+			name:  "invalid non-unicode escape",
+			input: `{"request":"path\.to\.file","response":"","notes":""}`,
+			want:  `{"request":"path\\.to\\.file","response":"","notes":""}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -71,7 +76,7 @@ func TestSanitizeBurpJSON(t *testing.T) {
 	}
 }
 
-func TestFixInvalidUnicodeEscapes(t *testing.T) {
+func TestFixInvalidEscapes(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -95,7 +100,7 @@ func TestFixInvalidUnicodeEscapes(t *testing.T) {
 		{
 			name:  "invalid unicode escape - binary data",
 			input: `{"request":"binary\u00\x01data"}`,
-			want:  `{"request":"binary\\u00\x01data"}`,
+			want:  `{"request":"binary\\u00\\x01data"}`,
 		},
 		{
 			name:  "mixed valid and invalid",
@@ -118,9 +123,9 @@ func TestFixInvalidUnicodeEscapes(t *testing.T) {
 			want:  string([]byte{'{', '"', 'r', '"', ':', '"', '\\', '\\', 'u', 0xC3, 0x9B, '"', '}'}),
 		},
 		{
-			name:  "other escape sequences preserved",
-			input: `{"request":"line1\nline2\ttab"}`,
-			want:  `{"request":"line1\nline2\ttab"}`,
+			name:  "valid escape sequences preserved",
+			input: `{"request":"line1\nline2\ttab\r\n\"quote\""}`,
+			want:  `{"request":"line1\nline2\ttab\r\n\"quote\""}`,
 		},
 		{
 			name:  "escape at end - truncated 2 chars",
@@ -147,11 +152,51 @@ func TestFixInvalidUnicodeEscapes(t *testing.T) {
 			input: `{"request":"\u00AB"}`,
 			want:  `{"request":"\u00AB"}`,
 		},
+		{
+			name:  "invalid escape - backslash dot",
+			input: `{"request":"path\.file"}`,
+			want:  `{"request":"path\\.file"}`,
+		},
+		{
+			name:  "invalid escape - backslash a",
+			input: `{"request":"test\avalue"}`,
+			want:  `{"request":"test\\avalue"}`,
+		},
+		{
+			name:  "invalid escape - backslash x",
+			input: `{"request":"hex\x41test"}`,
+			want:  `{"request":"hex\\x41test"}`,
+		},
+		{
+			name:  "invalid escape - backslash e",
+			input: `{"request":"escape\eseq"}`,
+			want:  `{"request":"escape\\eseq"}`,
+		},
+		{
+			name:  "multiple invalid escapes",
+			input: `{"request":"path\.to\.file\x00"}`,
+			want:  `{"request":"path\\.to\\.file\\x00"}`,
+		},
+		{
+			name:  "mixed valid and invalid escapes",
+			input: `{"request":"line\n\.path\ttab"}`,
+			want:  `{"request":"line\n\\.path\ttab"}`,
+		},
+		{
+			name:  "forward slash escape valid",
+			input: `{"request":"test\/path"}`,
+			want:  `{"request":"test\/path"}`,
+		},
+		{
+			name:  "backspace and formfeed valid",
+			input: `{"request":"back\bform\f"}`,
+			want:  `{"request":"back\bform\f"}`,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, fixInvalidUnicodeEscapes(tt.input))
+			assert.Equal(t, tt.want, fixInvalidEscapes(tt.input))
 		})
 	}
 }

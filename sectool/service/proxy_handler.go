@@ -1,8 +1,6 @@
 package service
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -30,50 +28,13 @@ const (
 	responsePreviewSize = 500
 )
 
-// globToJavaRegex converts a simple glob to Java regex.
+// globToRegex converts a simple glob pattern to regex.
 // Supports: * (any chars), ? (single char)
-func globToJavaRegex(glob string) string {
-	var result strings.Builder
-	for _, c := range glob {
-		switch c {
-		case '*':
-			result.WriteString(".*")
-		case '?':
-			result.WriteString(".")
-		case '.', '[', ']', '(', ')', '{', '}', '+', '^', '$', '|', '\\':
-			result.WriteString("\\")
-			result.WriteRune(c)
-		default:
-			result.WriteRune(c)
-		}
-	}
-	return result.String()
-}
-
-// buildJavaRegex builds a regex for Burp's regex filter from request filters.
-func buildJavaRegex(req *ProxyListRequest) string {
-	parts := make([]string, 0, 4)
-
-	if req.Host != "" {
-		parts = append(parts, `Host:\s*`+globToJavaRegex(req.Host))
-	}
-	if req.Path != "" {
-		// Match path in request line
-		parts = append(parts, `\s+`+globToJavaRegex(req.Path)+`\s+HTTP/`)
-	}
-	if req.Contains != "" {
-		parts = append(parts, regexp.QuoteMeta(req.Contains))
-	}
-	if req.ContainsBody != "" {
-		parts = append(parts, regexp.QuoteMeta(req.ContainsBody))
-	}
-
-	if len(parts) == 0 {
-		return ""
-	} else if len(parts) == 1 {
-		return parts[0]
-	}
-	return "(" + strings.Join(parts, "|") + ")"
+func globToRegex(glob string) string {
+	escaped := regexp.QuoteMeta(glob)
+	escaped = strings.ReplaceAll(escaped, `\*`, ".*")
+	escaped = strings.ReplaceAll(escaped, `\?`, ".")
+	return escaped
 }
 
 // truncatePath truncates path to maxLen characters.
@@ -89,8 +50,7 @@ func matchesGlob(s, pattern string) bool {
 	if pattern == "" {
 		return true
 	}
-	// Convert glob to regex and match
-	re, err := regexp.Compile("^" + globToJavaRegex(pattern) + "$")
+	re, err := regexp.Compile("^" + globToRegex(pattern) + "$")
 	if err != nil {
 		return false
 	}
@@ -193,28 +153,11 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Build regex filter if applicable (moved outside loop for efficiency)
-	var regex string
-	if req.HasFilters() &&
-		// If any of the filters below are set the filtering must be client side
-		req.Method == "" && req.Status == "" &&
-		req.ExcludeHost == "" && req.ExcludePath == "" &&
-		req.Since == "" {
-		regex = buildJavaRegex(&req)
-	}
-
-	// Fetch all entries from HttpBackend
+	// Fetch all entries from HttpBackend, filtering is done client-side
 	var allEntries []flowEntry
 	var offset uint32
 	for {
-		var proxyEntries []ProxyEntry
-		var fetchErr error
-
-		if regex != "" {
-			proxyEntries, fetchErr = s.httpBackend.GetProxyHistoryRegex(ctx, regex, fetchBatchSize, offset)
-		} else {
-			proxyEntries, fetchErr = s.httpBackend.GetProxyHistory(ctx, fetchBatchSize, offset)
-		}
+		proxyEntries, fetchErr := s.httpBackend.GetProxyHistory(ctx, fetchBatchSize, offset)
 		if fetchErr != nil {
 			if IsTimeoutError(fetchErr) {
 				s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
@@ -234,7 +177,7 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 		for i, entry := range proxyEntries {
 			method, host, path := extractRequestMeta(entry.Request)
 			var status int
-			if resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader([]byte(entry.Response))), nil); err == nil {
+			if resp, err := readResponseBytes([]byte(entry.Response)); err == nil {
 				_ = resp.Body.Close()
 				status = resp.StatusCode
 			} else {

@@ -406,7 +406,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 	t.Run("from_bundle", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		// Create a bundle manually
 		bundleDir := filepath.Join(t.TempDir(), "test-bundle")
@@ -441,7 +441,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 	t.Run("from_id", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		mockMCP.AddProxyEntry(
 			"GET /api/test HTTP/1.1\r\nHost: example.com\r\n\r\n",
@@ -481,7 +481,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 	t.Run("header_modify", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		// Create a bundle
 		bundleDir := filepath.Join(t.TempDir(), "test-bundle")
@@ -509,7 +509,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 	t.Run("no_input", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{})
 
@@ -523,7 +523,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 	t.Run("id_not_found", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "nonexistent"})
 
@@ -541,7 +541,7 @@ func TestHandleReplayGet(t *testing.T) {
 
 	t.Run("not_found", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/replay/get", ReplayGetRequest{ReplayID: "test123"})
 

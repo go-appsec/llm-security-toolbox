@@ -253,11 +253,11 @@ func parseHistoryNDJSON(text string) ([]ProxyHistoryEntry, error) {
 }
 
 // sanitizeBurpJSON fixes known Burp MCP bugs in JSON output:
-// 1. Invalid unicode escapes from binary data (e.g., \u00 followed by non-hex)
+// 1. Invalid escape sequences from binary/path data (e.g., \. or \u00XX with non-hex)
 // 2. Truncated JSON that doesn't close properly
 func sanitizeBurpJSON(line string) string {
-	// First fix invalid unicode escapes
-	line = fixInvalidUnicodeEscapes(line)
+	// First fix invalid escape sequences
+	line = fixInvalidEscapes(line)
 
 	// Then repair truncation if needed
 	line = repairTruncatedJSON(line)
@@ -265,11 +265,12 @@ func sanitizeBurpJSON(line string) string {
 	return line
 }
 
-// fixInvalidUnicodeEscapes fixes malformed \uXXXX sequences where XXXX contains non-hex chars.
-// Burp MCP embeds raw binary in JSON strings, creating invalid escapes.
-func fixInvalidUnicodeEscapes(s string) string {
-	// Fast path: no escapes to fix
-	if !strings.Contains(s, "\\u") {
+// fixInvalidEscapes fixes malformed escape sequences in JSON strings.
+// Burp MCP can embed raw binary or path-like data that creates invalid escapes.
+// Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+func fixInvalidEscapes(s string) string {
+	// Fast path: no backslashes to process
+	if !strings.Contains(s, "\\") {
 		return s
 	}
 
@@ -281,24 +282,25 @@ func fixInvalidUnicodeEscapes(s string) string {
 		if s[i] == '\\' && i+1 < len(s) {
 			next := s[i+1]
 			switch next {
-			case '\\':
-				// Escaped backslash - copy both and skip
-				result.WriteString("\\\\")
+			case '\\', '"', '/', 'b', 'f', 'n', 'r', 't':
+				// Valid simple escape - copy as-is
+				result.WriteByte(s[i])
+				result.WriteByte(next)
 				i += 2
 			case 'u':
-				// Unicode escape - validate it
+				// Unicode escape - validate hex digits
 				if i+5 < len(s) && isValidHexEscape(s[i+2:i+6]) {
-					// Valid escape, copy as-is
+					// Valid unicode escape, copy as-is
 					result.WriteString(s[i : i+6])
 					i += 6
 				} else {
-					// Invalid escape - escape the backslash to make it literal
+					// Invalid unicode escape - escape the backslash
 					result.WriteString("\\\\u")
 					i += 2
 				}
 			default:
-				// Other escape sequence (n, r, t, etc.) - copy as-is
-				result.WriteByte(s[i])
+				// Invalid escape sequence - escape the backslash to make it literal
+				result.WriteString("\\\\")
 				result.WriteByte(next)
 				i += 2
 			}

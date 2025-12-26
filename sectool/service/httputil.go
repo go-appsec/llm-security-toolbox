@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -74,6 +76,14 @@ func previewBody(body []byte, maxLen int) string {
 		return string(body)
 	}
 	return string(body[:maxLen]) + "..."
+}
+
+func readResponseBytes(resp []byte) (*http.Response, error) {
+	// Converts "HTTP/2 " to "HTTP/2.0 " since Go's parser requires major.minor format.
+	if bytes.HasPrefix(resp, []byte("HTTP/2 ")) {
+		resp = append([]byte("HTTP/2.0 "), resp[7:]...)
+	}
+	return http.ReadResponse(bufio.NewReader(bytes.NewReader(resp)), nil)
 }
 
 // extractHeaderLines extracts header lines from raw HTTP request.

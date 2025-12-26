@@ -381,7 +381,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 
 	var status int
 	var statusLine string
-	if resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(respHeaders)), nil); err == nil {
+	if resp, err := readResponseBytes(respHeaders); err == nil {
 		_ = resp.Body.Close()
 		status = resp.StatusCode
 		statusLine = resp.Proto + " " + resp.Status
@@ -437,7 +437,7 @@ func (s *Server) handleReplayGet(w http.ResponseWriter, r *http.Request) {
 
 	var status int
 	var statusLine string
-	if resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(result.Headers)), nil); err == nil {
+	if resp, err := readResponseBytes(result.Headers); err == nil {
 		_ = resp.Body.Close()
 		status = resp.StatusCode
 		statusLine = resp.Proto + " " + resp.Status

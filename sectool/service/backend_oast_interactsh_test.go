@@ -15,10 +15,10 @@ func TestInteractshBackend_CreateAndClose(t *testing.T) {
 	}
 
 	backend := NewInteractshBackend()
-	defer func() { _ = backend.Close() }()
+	t.Cleanup(func() { _ = backend.Close() })
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	sess, err := backend.CreateSession(ctx)
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("nonexistent", func(t *testing.T) {
 		backend := NewInteractshBackend()
-		defer func() { _ = backend.Close() }()
+		t.Cleanup(func() { _ = backend.Close() })
 
 		_, err := backend.PollSession(t.Context(), "nonexistent", "", 0)
 		require.Error(t, err)
@@ -62,10 +62,10 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 		}
 
 		backend := NewInteractshBackend()
-		defer func() { _ = backend.Close() }()
+		t.Cleanup(func() { _ = backend.Close() })
 
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		sess, err := backend.CreateSession(ctx)
 		require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("context_cancellation_returns_promptly", func(t *testing.T) {
 		backend, _, cleanup := setupBackend("testctx", "ctx.oast.fun")
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		type pollResult struct {
@@ -262,7 +262,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("wait_returns_when_events_arrive", func(t *testing.T) {
 		backend, sess, cleanup := setupBackend("testwait", "wait.oast.fun")
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		type pollResult struct {
 			result *OastPollResultInfo
@@ -296,7 +296,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("zero_wait_returns_immediately", func(t *testing.T) {
 		backend, _, cleanup := setupBackend("testzero", "zero.oast.fun")
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		start := time.Now()
 		result, err := backend.PollSession(t.Context(), "testzero", "", 0)
@@ -309,7 +309,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("stopped_session_returns_error", func(t *testing.T) {
 		backend, sess, cleanup := setupBackend("teststopped", "stopped.oast.fun")
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		sess.stopped = true
 
@@ -320,7 +320,7 @@ func TestInteractshBackend_PollSession(t *testing.T) {
 
 	t.Run("updates_lastPollIdx_after_poll", func(t *testing.T) {
 		backend, sess, cleanup := setupBackend("testidx", "idx.oast.fun")
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		sess.events = []OastEventInfo{
 			{ID: "e1", Time: time.Now(), Type: "dns"},
@@ -554,7 +554,7 @@ func TestInteractshBackend_DeleteSession(t *testing.T) {
 
 	t.Run("second_delete_returns_not_found", func(t *testing.T) {
 		backend := NewInteractshBackend()
-		defer func() { _ = backend.Close() }()
+		t.Cleanup(func() { _ = backend.Close() })
 
 		sess := &oastSession{
 			info: OastSessionInfo{
@@ -576,7 +576,7 @@ func TestInteractshBackend_DeleteSession(t *testing.T) {
 
 	t.Run("delete_by_domain", func(t *testing.T) {
 		backend := NewInteractshBackend()
-		defer func() { _ = backend.Close() }()
+		t.Cleanup(func() { _ = backend.Close() })
 
 		sess := &oastSession{
 			info: OastSessionInfo{

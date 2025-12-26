@@ -14,7 +14,7 @@ import (
 
 func TestBurp_ReplayFromFlowID(t *testing.T) {
 	srv, cleanup := setupBurpServer(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Get a flow ID
 	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
@@ -50,7 +50,7 @@ func TestBurp_ReplayFromFlowID(t *testing.T) {
 
 func TestBurp_ReplayWithModifications(t *testing.T) {
 	srv, cleanup := setupBurpServer(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Get a flow ID
 	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})

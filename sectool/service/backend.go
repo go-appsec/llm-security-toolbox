@@ -15,10 +15,6 @@ type HttpBackend interface {
 	// Returns up to count entries starting from offset.
 	GetProxyHistory(ctx context.Context, count int, offset uint32) ([]ProxyEntry, error)
 
-	// GetProxyHistoryRegex retrieves filtered proxy HTTP history entries.
-	// The regex syntax is HttpBackend-specific (Java regex for Burp).
-	GetProxyHistoryRegex(ctx context.Context, regex string, count int, offset uint32) ([]ProxyEntry, error)
-
 	// SendRequest sends an HTTP request and returns the response.
 	// The request is raw HTTP bytes. Response is returned as headers and body.
 	SendRequest(ctx context.Context, name string, req SendRequestInput) (*SendRequestResult, error)

@@ -1,13 +1,11 @@
 package service
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"path"
 	"strconv"
@@ -52,14 +50,6 @@ func (b *BurpBackend) OnConnectionLost(handler func(error)) {
 
 func (b *BurpBackend) GetProxyHistory(ctx context.Context, count int, offset uint32) ([]ProxyEntry, error) {
 	entries, err := b.client.GetProxyHistory(ctx, count, int(offset))
-	if err != nil {
-		return nil, err
-	}
-	return convertMCPEntries(entries), nil
-}
-
-func (b *BurpBackend) GetProxyHistoryRegex(ctx context.Context, regex string, count int, offset uint32) ([]ProxyEntry, error) {
-	entries, err := b.client.GetProxyHistoryRegex(ctx, regex, count, int(offset))
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +146,7 @@ func (b *BurpBackend) sendWithRedirects(ctx context.Context, req SendRequestInpu
 			return nil, err
 		}
 
-		resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(result.Headers)), nil)
+		resp, err := readResponseBytes(result.Headers)
 		if err != nil {
 			result.Duration = time.Since(start)
 			return result, nil

@@ -29,7 +29,7 @@ func connectOrSkip(t *testing.T, ctx context.Context) *BurpClient {
 
 func TestBurpConnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -39,7 +39,7 @@ func TestBurpConnect(t *testing.T) {
 
 func TestBurpConnectTwice(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -51,7 +51,7 @@ func TestBurpConnectTwice(t *testing.T) {
 
 func TestBurpGetProxyHistory_Empty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -63,7 +63,7 @@ func TestBurpGetProxyHistory_Empty(t *testing.T) {
 
 func TestBurpGetProxyHistory_FirstPage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -88,7 +88,7 @@ func TestBurpGetProxyHistory_FirstPage(t *testing.T) {
 
 func TestBurpGetProxyHistory_Pagination(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -117,7 +117,7 @@ func TestBurpGetProxyHistory_Pagination(t *testing.T) {
 
 func TestBurpGetProxyHistoryRaw(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -134,7 +134,7 @@ func TestBurpGetProxyHistoryRaw(t *testing.T) {
 
 func TestBurpGetProxyHistoryRegex_NoMatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -146,7 +146,7 @@ func TestBurpGetProxyHistoryRegex_NoMatch(t *testing.T) {
 
 func TestBurpGetProxyHistoryRegex_MatchHTTP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -162,7 +162,7 @@ func TestBurpGetProxyHistoryRegex_MatchHTTP(t *testing.T) {
 
 func TestBurpGetProxyHistoryRegex_MatchHost(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -175,7 +175,7 @@ func TestBurpGetProxyHistoryRegex_MatchHost(t *testing.T) {
 
 func TestBurpSetInterceptState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -193,7 +193,7 @@ func TestBurpSetInterceptState(t *testing.T) {
 
 func TestBurpCreateRepeaterTab(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -210,7 +210,7 @@ func TestBurpCreateRepeaterTab(t *testing.T) {
 
 func TestBurpCreateRepeaterTab_HTTP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -227,7 +227,7 @@ func TestBurpCreateRepeaterTab_HTTP(t *testing.T) {
 
 func TestBurpSendHTTP1Request(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -249,7 +249,7 @@ func TestBurpSendHTTP1Request(t *testing.T) {
 
 func TestBurpSendHTTP1Request_HTTP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -269,7 +269,7 @@ func TestBurpSendHTTP1Request_HTTP(t *testing.T) {
 
 func TestBurpSendHTTP1Request_POST(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -297,7 +297,7 @@ func TestBurpSendHTTP1Request_POST(t *testing.T) {
 
 func TestBurpCloseAndReconnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := New(config.DefaultBurpMCPURL)
 	err := client.Connect(ctx)
@@ -322,7 +322,7 @@ func TestBurpCloseAndReconnect(t *testing.T) {
 
 func TestBurpLargeHistoryFetch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -369,7 +369,7 @@ func itoa(n int) string {
 
 func TestBurpSendHTTP2Request(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -399,7 +399,7 @@ func TestBurpSendHTTP2Request(t *testing.T) {
 
 func TestBurpSendToIntruder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -416,7 +416,7 @@ func TestBurpSendToIntruder(t *testing.T) {
 
 func TestBurpGetProxyWebsocketHistory_Empty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -428,7 +428,7 @@ func TestBurpGetProxyWebsocketHistory_Empty(t *testing.T) {
 
 func TestBurpGetProxyWebsocketHistory_FirstPage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -443,7 +443,7 @@ func TestBurpGetProxyWebsocketHistory_FirstPage(t *testing.T) {
 
 func TestBurpGetProxyWebsocketHistoryRaw(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -455,7 +455,7 @@ func TestBurpGetProxyWebsocketHistoryRaw(t *testing.T) {
 
 func TestBurpGetProxyWebsocketHistoryRegex_NoMatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -466,7 +466,7 @@ func TestBurpGetProxyWebsocketHistoryRegex_NoMatch(t *testing.T) {
 
 func TestBurpSetTaskExecutionEngineState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -481,7 +481,7 @@ func TestBurpSetTaskExecutionEngineState(t *testing.T) {
 
 func TestBurpGetActiveEditorContents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 
@@ -500,7 +500,7 @@ func TestBurpGetActiveEditorContents(t *testing.T) {
 
 func TestBurpSetActiveEditorContents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	client := connectOrSkip(t, ctx)
 

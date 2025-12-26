@@ -16,7 +16,7 @@ import (
 
 func TestBurp_ProxyList(t *testing.T) {
 	srv, cleanup := setupBurpServer(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Query proxy list (may be empty or have entries depending on Burp state)
 	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{})
@@ -35,7 +35,7 @@ func TestBurp_ProxyList(t *testing.T) {
 
 func TestBurp_ProxyListWithFilters(t *testing.T) {
 	srv, cleanup := setupBurpServer(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Query with method filter
 	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
@@ -63,7 +63,7 @@ func TestBurp_ProxyListWithFilters(t *testing.T) {
 
 func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	srv, cleanup := setupBurpServer(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// First get a flow ID from proxy list
 	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{

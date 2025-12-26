@@ -118,7 +118,7 @@ func TestSplitHeadersBody(t *testing.T) {
 	}
 }
 
-func TestGlobToJavaRegex(t *testing.T) {
+func TestGlobToRegex(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -137,7 +137,7 @@ func TestGlobToJavaRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.glob, func(t *testing.T) {
-			assert.Equal(t, tt.expected, globToJavaRegex(tt.glob))
+			assert.Equal(t, tt.expected, globToRegex(tt.glob))
 		})
 	}
 }
@@ -250,43 +250,6 @@ func TestPreviewBody(t *testing.T) {
 	}
 }
 
-func TestBuildJavaRegex(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		req  ProxyListRequest
-		want string
-	}{
-		{
-			name: "host only",
-			req:  ProxyListRequest{Host: "*.example.com"},
-			want: `Host:\s*.*\.example\.com`,
-		},
-		{
-			name: "contains",
-			req:  ProxyListRequest{Contains: "password"},
-			want: `password`,
-		},
-		{
-			name: "multiple filters",
-			req:  ProxyListRequest{Host: "api.example.com", Contains: "secret"},
-			want: `(Host:\s*api\.example\.com|secret)`,
-		},
-		{
-			name: "empty",
-			req:  ProxyListRequest{},
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, buildJavaRegex(&tt.req))
-		})
-	}
-}
-
 func TestAggregateByTuple(t *testing.T) {
 	t.Parallel()
 
@@ -315,7 +278,7 @@ func TestHandleProxyList(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{})
 
@@ -333,7 +296,7 @@ func TestHandleProxyList(t *testing.T) {
 
 	t.Run("aggregate", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		// Add some proxy history entries
 		mockMCP.AddProxyEntries(
@@ -366,7 +329,7 @@ func TestHandleProxyList(t *testing.T) {
 
 	t.Run("filters", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		mockMCP.AddProxyEntries(
 			MakeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
@@ -398,7 +361,7 @@ func TestHandleProxyList(t *testing.T) {
 
 	t.Run("host_filter", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		mockMCP.AddProxyEntries(
 			MakeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
@@ -426,7 +389,7 @@ func TestHandleProxyList(t *testing.T) {
 
 	t.Run("exclude_host", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		mockMCP.AddProxyEntries(
 			MakeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
@@ -458,7 +421,7 @@ func TestHandleProxyExport(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		srv, mockMCP, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		mockMCP.AddProxyEntry(
 			"GET /api/test HTTP/1.1\r\nHost: example.com\r\n\r\n",
@@ -501,7 +464,7 @@ func TestHandleProxyExport(t *testing.T) {
 
 	t.Run("not_found", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{FlowID: "nonexistent"})
 
@@ -515,7 +478,7 @@ func TestHandleProxyExport(t *testing.T) {
 
 	t.Run("missing_id", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{})
 
@@ -572,4 +535,71 @@ func TestApplyClientFilters(t *testing.T) {
 		assert.Len(t, result, 1)
 		assert.Equal(t, "/page", result[0].path)
 	})
+}
+
+func TestReadResponseBytes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		input      string
+		wantStatus int
+		wantProto  string
+		wantErr    bool
+	}{
+		{
+			name:       "http/1.1 response",
+			input:      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n",
+			wantStatus: 200,
+			wantProto:  "HTTP/1.1",
+		},
+		{
+			name:       "http/1.0 response",
+			input:      "HTTP/1.0 404 Not Found\r\n\r\n",
+			wantStatus: 404,
+			wantProto:  "HTTP/1.0",
+		},
+		{
+			name:       "http/2 normalized and parsed",
+			input:      "HTTP/2 200\r\nContent-Type: text/html\r\n\r\n",
+			wantStatus: 200,
+			wantProto:  "HTTP/2.0",
+		},
+		{
+			name:       "http/2 with reason phrase",
+			input:      "HTTP/2 301 Moved Permanently\r\nLocation: /new\r\n\r\n",
+			wantStatus: 301,
+			wantProto:  "HTTP/2.0",
+		},
+		{
+			name:       "http/2.0 already normalized",
+			input:      "HTTP/2.0 204 No Content\r\n\r\n",
+			wantStatus: 204,
+			wantProto:  "HTTP/2.0",
+		},
+		{
+			name:    "empty input",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "malformed response",
+			input:   "not a valid http response",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := readResponseBytes([]byte(tt.input))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+			assert.Equal(t, tt.wantProto, resp.Proto)
+		})
+	}
 }

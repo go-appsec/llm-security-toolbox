@@ -15,7 +15,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("missing_oast_id", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{})
 
@@ -30,7 +30,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("session_not_found", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{OastID: "nonexistent"})
 
@@ -44,7 +44,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("invalid_wait_duration", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "test",
@@ -62,7 +62,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("caps_wait_at_120s", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		backend := srv.oastBackend.(*InteractshBackend)
 		sess := &oastSession{
@@ -107,7 +107,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("returns_events_with_formatted_time", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		eventTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
 
@@ -166,7 +166,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("returns_dropped_count", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		backend := srv.oastBackend.(*InteractshBackend)
 		sess := &oastSession{
@@ -205,7 +205,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 	t.Run("poll_by_domain", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		backend := srv.oastBackend.(*InteractshBackend)
 		sess := &oastSession{
@@ -252,7 +252,7 @@ func TestHandleOastList(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/list", nil)
 
@@ -269,7 +269,7 @@ func TestHandleOastList(t *testing.T) {
 
 	t.Run("with_sessions", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		createdAt := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
 
@@ -328,7 +328,7 @@ func TestHandleOastDelete(t *testing.T) {
 
 	t.Run("missing_oast_id", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{})
 
@@ -343,7 +343,7 @@ func TestHandleOastDelete(t *testing.T) {
 
 	t.Run("session_not_found", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "nonexistent"})
 
@@ -357,7 +357,7 @@ func TestHandleOastDelete(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		backend := srv.oastBackend.(*InteractshBackend)
 		sess := &oastSession{
@@ -390,7 +390,7 @@ func TestHandleOastDelete(t *testing.T) {
 
 	t.Run("delete_by_domain", func(t *testing.T) {
 		srv, _, cleanup := testServerWithMCP(t)
-		defer cleanup()
+		t.Cleanup(cleanup)
 
 		backend := srv.oastBackend.(*InteractshBackend)
 		sess := &oastSession{
