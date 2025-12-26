@@ -22,56 +22,44 @@ make lint           # Run golangci-lint and go vet
 
 ## Architecture
 
-```
-sectool/
-├── main.go              # Entry point; routes --service flag to daemon mode, else CLI command parsing and dispatch
-├── config/              # Configuration management
-│   ├── config.go        # Config loading/saving, defaults
-│   └── config_test.go
-├── service/             # Core daemon and client implementation
-│   ├── server.go        # HTTP server over Unix socket
-│   ├── client.go        # Auto-starts service if needed
-│   ├── types.go         # Shared API types (ServicePaths, APIResponse, APIError)
-│   ├── flags.go         # Service subcommand parsing
-│   ├── commands.go      # Service CLI implementations (status/stop/logs)
-│   ├── backend.go       # HttpBackend and OastBackend interface definitions
-│   ├── backend_http_burp.go      # Burp MCP implementation of HttpBackend
-│   ├── backend_oast_interactsh.go # Interactsh implementation of OastBackend
-│   ├── proxy_handler.go  # Handles /proxy/list, /proxy/export
-│   ├── replay_handler.go # Handles /replay/send, /replay/get
-│   ├── oast_handler.go   # Handles /oast/* endpoints
-│   ├── httputil.go       # HTTP parsing utilities
-│   ├── bundle.go         # Request bundle file operations
-│   ├── mcp/              # Burp MCP client
-│   │   ├── client.go     # SSE-based MCP client
-│   │   └── types.go      # MCP-specific types
-│   ├── store/            # Ephemeral per-session storage
-│   │   ├── flow.go       # Flow ID → Burp offset mapping (thread-safe)
-│   │   ├── hash.go       # Content hashing for flow identity
-│   │   └── request.go    # Replay result storage with TTL cleanup
-│   ├── ids/              # Short ID generation
-│   │   └── ids.go        # Base62 random IDs using crypto/rand
-│   ├── socket_security.go        # Secure listener wrapper, socket path validation
-│   └── socket_security_{linux,darwin,other}.go  # Peer credential verification (SO_PEERCRED/LOCAL_PEERCRED)
-├── proxy/               # Proxy history CLI
-│   ├── flags.go         # Subcommand parsing (list/export/intercept/rule)
-│   └── proxy.go         # Command implementations
-├── replay/              # HTTP request replay CLI
-│   ├── flags.go         # Subcommand parsing (send/get)
-│   └── replay.go        # Command implementations
-├── oast/                # Out-of-band testing CLI
-│   ├── flags.go         # Subcommand parsing (create/poll/list/delete)
-│   └── oast.go          # Command implementations
-├── encode/              # Encoding utilities (client-side only)
-│   ├── flags.go         # Subcommand parsing (url/base64/html)
-│   └── encode.go        # Encoding/decoding implementations
-└── initialize/          # Agent guide generation
-    ├── flags.go         # Subcommand parsing (explore/test-report)
-    ├── init.go          # Initialization logic
-    └── templates/       # Embedded markdown guides
-        ├── AGENT-explore.md
-        └── AGENT-test-report.md
-```
+| File | Description |
+|------|-------------|
+| `main.go` | Entry point; routes --service flag to daemon mode, else CLI command parsing and dispatch |
+| `config/config.go` | Config loading/saving, defaults |
+| `config/config_test.go` | Config tests |
+| `service/server.go` | HTTP server over Unix socket |
+| `service/client.go` | Auto-starts service if needed |
+| `service/types.go` | Shared API types (ServicePaths, APIResponse, APIError) |
+| `service/flags.go` | Service subcommand parsing |
+| `service/commands.go` | Service CLI implementations (status/stop/logs) |
+| `service/backend.go` | HttpBackend and OastBackend interface definitions |
+| `service/backend_http_burp.go` | Burp MCP implementation of HttpBackend |
+| `service/backend_oast_interactsh.go` | Interactsh implementation of OastBackend |
+| `service/proxy_handler.go` | Handles /proxy/list, /proxy/export |
+| `service/replay_handler.go` | Handles /replay/send, /replay/get |
+| `service/oast_handler.go` | Handles /oast/* endpoints |
+| `service/httputil.go` | HTTP parsing utilities |
+| `service/bundle.go` | Request bundle file operations |
+| `service/mcp/client.go` | SSE-based MCP client |
+| `service/mcp/types.go` | MCP-specific types |
+| `service/store/flow.go` | Flow ID → Burp offset mapping (thread-safe) |
+| `service/store/hash.go` | Content hashing for flow identity |
+| `service/store/request.go` | Replay result storage with TTL cleanup |
+| `service/ids/ids.go` | Base62 random IDs using crypto/rand |
+| `service/socket_security.go` | Secure listener wrapper, socket path validation |
+| `service/socket_security_{linux,darwin,other}.go` | Peer credential verification (SO_PEERCRED/LOCAL_PEERCRED) |
+| `proxy/flags.go` | Subcommand parsing (list/export/intercept/rule) |
+| `proxy/proxy.go` | Command implementations |
+| `replay/flags.go` | Subcommand parsing (send/get) |
+| `replay/replay.go` | Command implementations |
+| `oast/flags.go` | Subcommand parsing (create/poll/list/delete) |
+| `oast/oast.go` | Command implementations |
+| `encode/flags.go` | Subcommand parsing (url/base64/html) |
+| `encode/encode.go` | Encoding/decoding implementations |
+| `initialize/flags.go` | Subcommand parsing (explore/test-report) |
+| `initialize/init.go` | Initialization logic |
+| `initialize/templates/AGENT-explore.md` | Embedded exploration guide |
+| `initialize/templates/AGENT-test-report.md` | Embedded test-report guide |
 
 **Service lifecycle:**
 1. CLI command runs → client checks for existing service via socket
