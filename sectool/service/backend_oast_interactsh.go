@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/go-analyze/bulk"
-	"github.com/projectdiscovery/interactsh/pkg/client"
-	"github.com/projectdiscovery/interactsh/pkg/server"
+	"github.com/go-harden/interactsh-lite/pkg/oobclient"
 
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
 )
@@ -40,7 +39,7 @@ var _ OastBackend = (*InteractshBackend)(nil)
 // oastSession holds the state for a single OAST session.
 type oastSession struct {
 	info   OastSessionInfo
-	client *client.Client
+	client *oobclient.Client
 
 	mu           sync.Mutex
 	events       []OastEventInfo
@@ -77,8 +76,7 @@ func (b *InteractshBackend) CreateSession(ctx context.Context, label string) (*O
 	}
 	b.mu.Unlock()
 
-	opts := client.DefaultOptions
-	c, err := client.New(opts)
+	c, err := oobclient.New(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create interactsh client: %w", err)
 	}
@@ -137,7 +135,7 @@ func (b *InteractshBackend) CreateSession(ctx context.Context, label string) (*O
 
 // pollLoop runs background polling for a session.
 func (b *InteractshBackend) pollLoop(sess *oastSession) {
-	callback := func(interaction *server.Interaction) {
+	callback := func(interaction *oobclient.Interaction) {
 		sess.mu.Lock()
 		defer sess.mu.Unlock()
 
@@ -178,7 +176,7 @@ func (b *InteractshBackend) pollLoop(sess *oastSession) {
 			Time:      eventTime,
 			Type:      strings.ToLower(interaction.Protocol),
 			SourceIP:  interaction.RemoteAddress,
-			Subdomain: interaction.FullId,
+			Subdomain: interaction.FullID,
 			Details:   details,
 		}
 		sess.events = append(sess.events, event)
