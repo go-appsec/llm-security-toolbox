@@ -75,6 +75,8 @@ replay send [options]
     Nested paths: user.email, items[0].id, data.users[0].name
     Objects/arrays: --set-json 'meta={"k":"v"}' or 'ids=[1,2,3]'
 
+  Note: Content-Length header is automatically updated when body changes.
+
   Other options:
     --follow-redirects             follow 3xx redirects
     --request-timeout <dur>        HTTP timeout (0 = no timeout)
@@ -189,6 +191,8 @@ JSON body modifications:
     --set-json 'config={"debug":true}'
 
   Modification order: remove -> set
+
+  Note: Content-Length header is automatically updated when body changes.
 
 Validation:
   Requests are validated before sending. If validation fails, the request
