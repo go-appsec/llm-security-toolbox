@@ -78,13 +78,13 @@ func readResponseBytes(resp []byte) (*http.Response, error) {
 }
 
 // previewBody returns a UTF-8 safe preview of the body.
-// Returns "<BINARY>" for non-UTF-8 content.
+// Returns "<BINARY:N Bytes>" for non-UTF-8 content, truncates at maxLen.
 func previewBody(body []byte, maxLen int) string {
 	if len(body) == 0 {
 		return ""
 	}
 	if !utf8.Valid(body) {
-		return "<BINARY>"
+		return "<BINARY:" + strconv.Itoa(len(body)) + " Bytes>"
 	}
 	if len(body) <= maxLen {
 		return string(body)

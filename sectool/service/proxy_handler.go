@@ -29,6 +29,8 @@ const (
 	maxPathLength = 100
 	// responsePreviewSize is the maximum bytes to show in response preview
 	responsePreviewSize = 500
+	// fullBodyMaxSize is the maximum bytes to return in full body responses
+	fullBodyMaxSize = 20480
 )
 
 // globToRegex converts a simple glob pattern to regex.

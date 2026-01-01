@@ -191,6 +191,7 @@ When running in MCP mode, the following tools are exposed:
 | Tool | Description |
 |------|-------------|
 | `proxy_list` | Query proxy history with filters (host, path, method, status, contains) |
+| `proxy_get` | Get full request/response for a flow (MCP alternative to CLI export, no disk I/O) |
 | `proxy_rule_list` | List proxy match/replace rules |
 | `proxy_rule_add` | Add proxy match/replace rule |
 | `proxy_rule_update` | Update existing proxy rule |

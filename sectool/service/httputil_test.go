@@ -606,6 +606,12 @@ func TestReadResponseBytes(t *testing.T) {
 func TestPreviewBody(t *testing.T) {
 	t.Parallel()
 
+	// Create invalid UTF-8 binary data
+	binaryLarge := make([]byte, 1024)
+	for i := range binaryLarge {
+		binaryLarge[i] = 0xff // 0xff is invalid UTF-8
+	}
+
 	tests := []struct {
 		name   string
 		body   []byte
@@ -613,9 +619,11 @@ func TestPreviewBody(t *testing.T) {
 		want   string
 	}{
 		{"empty", []byte{}, 100, ""},
-		{"utf8 short", []byte("hello world"), 100, "hello world"},
-		{"utf8 truncate", []byte("hello world"), 5, "hello..."},
-		{"binary", []byte{0x00, 0x01, 0xff}, 100, "<BINARY>"},
+		{"utf8_short", []byte("hello world"), 100, "hello world"},
+		{"utf8_truncate", []byte("hello world"), 5, "hello..."},
+		{"binary_small", []byte{0x80, 0x81, 0xff}, 100, "<BINARY:3 Bytes>"},
+		{"binary_large", binaryLarge, 100, "<BINARY:1024 Bytes>"},
+		{"utf8_exact_limit", []byte("hello"), 5, "hello"},
 	}
 
 	for _, tt := range tests {

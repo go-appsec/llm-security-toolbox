@@ -90,6 +90,7 @@ func (m *mcpServer) Close(ctx context.Context) error {
 func (m *mcpServer) registerTools() {
 	// Proxy tools
 	m.server.AddTool(m.proxyListTool(), m.handleProxyList)
+	m.server.AddTool(m.proxyGetTool(), m.handleProxyGet)
 	m.server.AddTool(m.proxyRuleListTool(), m.handleProxyRuleList)
 	m.server.AddTool(m.proxyRuleAddTool(), m.handleProxyRuleAdd)
 	m.server.AddTool(m.proxyRuleUpdateTool(), m.handleProxyRuleUpdate)
@@ -133,6 +134,16 @@ Incremental: since=flow_id or "last" for new entries only.`),
 		mcp.WithString("exclude_host", mcp.Description("Exclude hosts matching glob pattern")),
 		mcp.WithString("exclude_path", mcp.Description("Exclude paths matching glob pattern")),
 		mcp.WithNumber("limit", mcp.Description("Max results (setting this switches to flow mode)")),
+	)
+}
+
+func (m *mcpServer) proxyGetTool() mcp.Tool {
+	return mcp.NewTool("proxy_get",
+		mcp.WithDescription(`Get full request and response data for a proxy history entry.
+
+Returns headers and body for both request and response. Binary bodies are returned as "<BINARY:N Bytes>" placeholder.
+Use flow_id from proxy_list to identify the entry.`),
+		mcp.WithString("flow_id", mcp.Required(), mcp.Description("Flow ID from proxy_list")),
 	)
 }
 
@@ -226,7 +237,8 @@ func (m *mcpServer) replayGetTool() mcp.Tool {
 	return mcp.NewTool("replay_get",
 		mcp.WithDescription(`Retrieve full response from a previous replay_send.
 
-Returns headers and base64-encoded body. Results are ephemeral and cleared on service restart.`),
+Returns headers and body. Binary bodies are returned as "<BINARY:N Bytes>" placeholder.
+Results are ephemeral and cleared on service restart.`),
 		mcp.WithString("replay_id", mcp.Required(), mcp.Description("Replay ID from replay_send response")),
 	)
 }
@@ -325,6 +337,53 @@ func (m *mcpServer) handleProxyList(ctx context.Context, req mcp.CallToolRequest
 	}
 
 	return jsonResult(resp)
+}
+
+func (m *mcpServer) handleProxyGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	flowID := req.GetString("flow_id", "")
+	if flowID == "" {
+		return errorResult("flow_id is required"), nil
+	}
+
+	entry, ok := m.service.flowStore.Lookup(flowID)
+	if !ok {
+		return errorResult("flow_id not found: run proxy_list to see available flows"), nil
+	}
+
+	proxyEntries, err := m.service.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
+	if err != nil {
+		return errorResult("failed to fetch flow: " + err.Error()), nil
+	}
+	if len(proxyEntries) == 0 {
+		return errorResult("flow not found in proxy history"), nil
+	}
+
+	rawReq := []byte(proxyEntries[0].Request)
+	rawResp := []byte(proxyEntries[0].Response)
+
+	method, host, path := extractRequestMeta(proxyEntries[0].Request)
+	reqHeaders, reqBody := splitHeadersBody(rawReq)
+	respHeaders, respBody := splitHeadersBody(rawResp)
+	respCode, respStatusLine := parseResponseStatus(respHeaders)
+
+	scheme, _, _ := inferSchemeAndPort(host)
+	fullURL := scheme + "://" + host + path
+
+	log.Printf("mcp/proxy_get: flow=%s method=%s url=%s", flowID, method, fullURL)
+
+	return jsonResult(ProxyGetResponse{
+		FlowID:      flowID,
+		Method:      method,
+		URL:         fullURL,
+		ReqHeaders:  string(reqHeaders),
+		ReqBody:     previewBody(reqBody, fullBodyMaxSize),
+		ReqSize:     len(reqBody),
+		Status:      respCode,
+		StatusLine:  respStatusLine,
+		RespHeaders: string(respHeaders),
+		RespBody:    previewBody(respBody, fullBodyMaxSize),
+		RespSize:    len(respBody),
+	})
 }
 
 func (m *mcpServer) handleProxyRuleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -576,7 +635,7 @@ func (m *mcpServer) handleReplayGet(ctx context.Context, req mcp.CallToolRequest
 		Status:      respCode,
 		StatusLine:  respStatusLine,
 		RespHeaders: string(result.Headers),
-		RespBody:    base64.StdEncoding.EncodeToString(result.Body),
+		RespBody:    previewBody(result.Body, fullBodyMaxSize),
 		RespSize:    len(result.Body),
 	})
 }

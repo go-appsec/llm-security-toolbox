@@ -156,6 +156,7 @@ func TestMCP_ListTools(t *testing.T) {
 
 	expectedTools := []string{
 		"proxy_list",
+		"proxy_get",
 		"proxy_rule_list",
 		"proxy_rule_add",
 		"proxy_rule_update",
@@ -238,6 +239,69 @@ func TestMCP_ProxyListWithLimit(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(text), &resp))
 
 	assert.LessOrEqual(t, len(resp.Flows), 5, "should respect limit")
+}
+
+// =============================================================================
+// Proxy Get Tests
+// =============================================================================
+
+func TestMCP_ProxyGet(t *testing.T) {
+	_, mcpClient, cleanup := setupMCPServer(t)
+	defer cleanup()
+
+	// Get a flow ID from proxy list
+	listResult := callTool(t, mcpClient, "proxy_list", map[string]interface{}{
+		"method": "GET",
+	})
+	require.False(t, listResult.IsError)
+
+	text := extractText(t, listResult)
+	var listResp ProxyListResponse
+	require.NoError(t, json.Unmarshal([]byte(text), &listResp))
+
+	if len(listResp.Flows) == 0 {
+		t.Skip("no proxy history entries available")
+	}
+
+	flowID := listResp.Flows[0].FlowID
+
+	// Get full flow data
+	result := callTool(t, mcpClient, "proxy_get", map[string]interface{}{
+		"flow_id": flowID,
+	})
+	assert.False(t, result.IsError, "proxy_get should succeed: %s", extractText(t, result))
+
+	text = extractText(t, result)
+	var resp ProxyGetResponse
+	require.NoError(t, json.Unmarshal([]byte(text), &resp))
+
+	assert.Equal(t, flowID, resp.FlowID)
+	assert.NotEmpty(t, resp.Method)
+	assert.NotEmpty(t, resp.URL)
+	assert.NotEmpty(t, resp.ReqHeaders)
+	assert.NotEmpty(t, resp.RespHeaders)
+	assert.Positive(t, resp.Status)
+	t.Logf("proxy_get: method=%s url=%s status=%d req_size=%d resp_size=%d",
+		resp.Method, resp.URL, resp.Status, resp.ReqSize, resp.RespSize)
+}
+
+func TestMCP_ProxyGetValidation(t *testing.T) {
+	_, mcpClient, cleanup := setupMCPServer(t)
+	defer cleanup()
+
+	t.Run("missing_flow_id", func(t *testing.T) {
+		result := callTool(t, mcpClient, "proxy_get", map[string]interface{}{})
+		assert.True(t, result.IsError, "should fail without flow_id")
+		assert.Contains(t, extractText(t, result), "flow_id is required")
+	})
+
+	t.Run("invalid_flow_id", func(t *testing.T) {
+		result := callTool(t, mcpClient, "proxy_get", map[string]interface{}{
+			"flow_id": "nonexistent",
+		})
+		assert.True(t, result.IsError, "should fail with invalid flow_id")
+		assert.Contains(t, extractText(t, result), "not found")
+	})
 }
 
 // =============================================================================

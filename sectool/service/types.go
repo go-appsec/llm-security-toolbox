@@ -223,6 +223,22 @@ type ProxyExportResponse struct {
 	BundlePath string `json:"bundle_path"`
 }
 
+// ProxyGetResponse is the response for the proxy_get MCP tool.
+// Returns full request and response data for a proxy history entry.
+type ProxyGetResponse struct {
+	FlowID      string `json:"flow_id"`
+	Method      string `json:"method"`
+	URL         string `json:"url"`
+	ReqHeaders  string `json:"request_headers"`
+	ReqBody     string `json:"request_body"`
+	ReqSize     int    `json:"request_size"`
+	Status      int    `json:"status"`
+	StatusLine  string `json:"status_line"`
+	RespHeaders string `json:"response_headers"`
+	RespBody    string `json:"response_body"`
+	RespSize    int    `json:"response_size"`
+}
+
 // =============================================================================
 // Common Response Types
 // =============================================================================
@@ -276,13 +292,14 @@ type ReplayGetRequest struct {
 
 // ReplayGetResponse is the response for POST /replay/get.
 // Unlike ReplaySendResponse which returns a preview, this returns the full response.
+// Body is returned as text if UTF-8, or "<BINARY:N Bytes>" placeholder if binary.
 type ReplayGetResponse struct {
 	ReplayID    string `json:"replay_id"`
 	Duration    string `json:"duration"`
 	Status      int    `json:"status"`
 	StatusLine  string `json:"status_line"`
 	RespHeaders string `json:"response_headers"`
-	RespBody    string `json:"response_body"` // base64 encoded
+	RespBody    string `json:"response_body"`
 	RespSize    int    `json:"response_size"`
 }
 

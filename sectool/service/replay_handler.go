@@ -3,7 +3,6 @@ package service
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -435,7 +434,7 @@ func (s *Server) handleReplayGet(w http.ResponseWriter, r *http.Request) {
 		Status:      respCode,
 		StatusLine:  respStatusLine,
 		RespHeaders: string(result.Headers),
-		RespBody:    base64.StdEncoding.EncodeToString(result.Body),
+		RespBody:    previewBody(result.Body, fullBodyMaxSize),
 		RespSize:    len(result.Body),
 	})
 }
