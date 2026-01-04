@@ -11,7 +11,7 @@ import (
 	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 )
 
-var replaySubcommands = []string{"send", "get", "help"}
+var replaySubcommands = []string{"send", "get", "create", "help"}
 
 func Parse(args []string) error {
 	if len(args) < 1 {
@@ -24,6 +24,8 @@ func Parse(args []string) error {
 		return parseSend(args[1:])
 	case "get":
 		return parseGet(args[1:])
+	case "create":
+		return parseCreate(args[1:])
 	case "help", "--help", "-h":
 		printUsage()
 		return nil
@@ -103,6 +105,28 @@ replay get <replay_id>
     sectool replay get rpl_abc123           # get full response
 
   Output: Markdown with status, headers, and complete response body
+
+---
+
+replay create <url> [options]
+
+  Create a request bundle from scratch (without capturing traffic first).
+  Creates an editable bundle that can be modified and sent with 'replay send'.
+
+  Arguments:
+    <url>       Target URL (defaults to HTTPS)
+
+  Options:
+    --method        HTTP method (default: GET)
+    --header        Header in 'Name: Value' format (repeatable)
+    --body          Path to body file (- for stdin)
+
+  Examples:
+    sectool replay create https://api.example.com/users
+    sectool replay create example.com/api/v1/data --method POST --body payload.json
+    sectool replay create https://api.example.com --header "Authorization: Bearer token"
+
+  Output: Bundle path that can be used with 'sectool replay send --bundle'
 `)
 }
 
@@ -256,4 +280,49 @@ Options:
 	}
 
 	return get(timeout, fs.Args()[0])
+}
+
+func parseCreate(args []string) error {
+	fs := pflag.NewFlagSet("replay create", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
+
+	var timeout time.Duration
+	var method string
+	var headers []string
+	var bodyPath string
+
+	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
+	fs.StringVar(&method, "method", "GET", "HTTP method")
+	fs.StringArrayVar(&headers, "header", nil, "header in 'Name: Value' format (repeatable)")
+	fs.StringVar(&bodyPath, "body", "", "path to body file (- for stdin)")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: sectool replay create <url> [options]
+
+Create a request bundle from scratch (without capturing traffic first).
+
+Arguments:
+  <url>       Target URL (defaults to HTTPS if scheme not specified)
+
+Options:
+`)
+		fs.PrintDefaults()
+		fmt.Fprint(os.Stderr, `
+Examples:
+  sectool replay create https://api.example.com/users
+  sectool replay create example.com/api/v1/data --method POST --body payload.json
+  sectool replay create https://api.example.com --header "Authorization: Bearer token"
+
+Output: Bundle path that can be used with 'sectool replay send --bundle'
+`)
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	} else if len(fs.Args()) < 1 {
+		fs.Usage()
+		return errors.New("url argument is required")
+	}
+
+	return create(timeout, fs.Args()[0], method, headers, bodyPath)
 }

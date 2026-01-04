@@ -340,6 +340,15 @@ func (c *Client) ReplayGet(ctx context.Context, req *ReplayGetRequest) (*ReplayG
 	return &resp, nil
 }
 
+// ReplayCreate creates a new request bundle from scratch.
+func (c *Client) ReplayCreate(ctx context.Context, req *ReplayCreateRequest) (*ReplayCreateResponse, error) {
+	var resp ReplayCreateResponse
+	if err := c.doJSONRequest(ctx, "/replay/create", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // =============================================================================
 // OAST API
 // =============================================================================

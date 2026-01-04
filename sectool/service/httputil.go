@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 const (
 	schemeHTTP  = "http"
 	schemeHTTPS = "https"
+	userAgent   = "go-harden/llm-security-toolbox - sectool"
 )
 
 // extractRequestMeta extracts method, host, path from raw HTTP request.
@@ -295,4 +297,59 @@ func modifyRequestLine(raw []byte, opts *PathQueryOpts) []byte {
 	result = append(result, []byte(newLine)...)
 	result = append(result, raw[lineEnd:]...)
 	return result
+}
+
+// parseURLWithDefaultHTTPS parses a URL string, defaulting to HTTPS if no scheme.
+func parseURLWithDefaultHTTPS(urlStr string) (*url.URL, error) {
+	if !strings.Contains(urlStr, "://") {
+		urlStr = schemeHTTPS + "://" + urlStr
+	}
+	return url.Parse(urlStr)
+}
+
+// targetFromURL extracts Target (hostname, port, usesHTTPS) from a parsed URL.
+func targetFromURL(u *url.URL) Target {
+	t := Target{
+		Hostname:  u.Hostname(),
+		UsesHTTPS: u.Scheme != schemeHTTP,
+	}
+
+	if u.Port() != "" {
+		t.Port, _ = strconv.Atoi(u.Port())
+	} else if t.UsesHTTPS {
+		t.Port = 443
+	} else {
+		t.Port = 80
+	}
+
+	return t
+}
+
+// buildRawRequest constructs a raw HTTP/1.1 request from components.
+// Returns bytes with proper CRLF line endings.
+func buildRawRequest(method string, parsedURL *url.URL, headers map[string]string, body []byte) []byte {
+	var bodyReader io.Reader
+	if len(body) > 0 {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, parsedURL.String(), bodyReader)
+	if err != nil {
+		return nil
+	}
+	req.ContentLength = int64(len(body))
+	req.Header.Set("User-Agent", userAgent)
+
+	// Apply user headers (may override Host or User-Agent)
+	for name, value := range headers {
+		if strings.EqualFold(name, "Host") {
+			req.Host = value
+		} else {
+			req.Header.Set(name, value)
+		}
+	}
+
+	var buf bytes.Buffer
+	_ = req.Write(&buf)
+	return buf.Bytes()
 }

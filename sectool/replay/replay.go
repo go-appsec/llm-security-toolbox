@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jentfoo/llm-security-toolbox/sectool/service"
@@ -164,6 +165,74 @@ func get(timeout time.Duration, replayID string) error {
 			fmt.Printf("Body:\n```\n%s\n```\n", string(body))
 		}
 	}
+
+	return nil
+}
+
+func create(timeout time.Duration, urlArg, method string, headers []string, bodyPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Read body if specified
+	var body []byte
+	if bodyPath != "" {
+		if bodyPath == "-" {
+			body, err = io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("failed to read body from stdin: %w", err)
+			}
+		} else {
+			body, err = os.ReadFile(bodyPath)
+			if err != nil {
+				return fmt.Errorf("failed to read body file: %w", err)
+			}
+		}
+	}
+
+	// Parse headers into map
+	headerMap := make(map[string]string)
+	for _, h := range headers {
+		name, value, ok := strings.Cut(h, ":")
+		if !ok {
+			return fmt.Errorf("invalid header format (missing ':'): %q", h)
+		}
+		headerMap[strings.TrimSpace(name)] = strings.TrimSpace(value)
+	}
+
+	client := service.NewClient(workDir, service.WithTimeout(timeout))
+	if err := client.EnsureService(ctx); err != nil {
+		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+	}
+
+	resp, err := client.ReplayCreate(ctx, &service.ReplayCreateRequest{
+		URL:     urlArg,
+		Method:  method,
+		Headers: headerMap,
+		Body:    string(body),
+	})
+	if err != nil {
+		return fmt.Errorf("replay create failed: %w", err)
+	}
+
+	// Convert to relative path for cleaner output
+	bundlePath := resp.BundlePath
+	if rel, err := filepath.Rel(workDir, resp.BundlePath); err == nil {
+		bundlePath = rel
+	}
+
+	// Output result
+	fmt.Printf("Created request bundle `%s`\n\n", resp.BundleID)
+	fmt.Printf("Bundle path: `%s`\n\n", bundlePath)
+	fmt.Println("Files created:")
+	fmt.Println("- `request.http` - HTTP headers with body placeholder")
+	fmt.Println("- `body` - Request body (edit for modifications)")
+	fmt.Println("- `request.meta.json` - Metadata")
+	fmt.Printf("\nTo send: `sectool replay send --bundle %s`\n", resp.BundleID)
 
 	return nil
 }

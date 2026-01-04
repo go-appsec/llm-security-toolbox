@@ -101,6 +101,7 @@ func (m *mcpServer) registerTools() {
 	// Replay tools
 	m.server.AddTool(m.replaySendTool(), m.handleReplaySend)
 	m.server.AddTool(m.replayGetTool(), m.handleReplayGet)
+	m.server.AddTool(m.requestSendTool(), m.handleRequestSend)
 
 	// OAST tools
 	m.server.AddTool(m.oastCreateTool(), m.handleOastCreate)
@@ -257,6 +258,21 @@ func (m *mcpServer) replayGetTool() mcp.Tool {
 Returns headers and body. Binary bodies are returned as "<BINARY:N Bytes>" placeholder.
 Results are ephemeral and cleared on service restart.`),
 		mcp.WithString("replay_id", mcp.Required(), mcp.Description("Replay ID from replay_send response")),
+	)
+}
+
+func (m *mcpServer) requestSendTool() mcp.Tool {
+	return mcp.NewTool("request_send",
+		mcp.WithDescription(`Send a request from scratch (no captured flow required).
+
+Use this when you need to send a request to a URL without first capturing it via proxy.
+Returns: replay_id, status, headers, response_preview. Full body via replay_get.`),
+		mcp.WithString("url", mcp.Required(), mcp.Description("Target URL (e.g., 'https://api.example.com/users')")),
+		mcp.WithString("method", mcp.Description("HTTP method (default: GET)")),
+		mcp.WithObject("headers", mcp.Description("Headers as object: {\"Name\": \"Value\"}")),
+		mcp.WithString("body", mcp.Description("Request body content")),
+		mcp.WithBoolean("follow_redirects", mcp.Description("Follow HTTP redirects (default: false)")),
+		mcp.WithString("timeout", mcp.Description("Request timeout (e.g., '30s', '1m')")),
 	)
 }
 
@@ -634,7 +650,7 @@ func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolReques
 
 	if !req.GetBool("force", false) {
 		issues := validateRequest(rawRequest)
-		if slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == "error" }) {
+		if slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == severityError }) {
 			return errorResult("validation failed:\n" + formatIssues(issues)), nil
 		}
 	}
@@ -721,6 +737,85 @@ func (m *mcpServer) handleReplayGet(ctx context.Context, req mcp.CallToolRequest
 		RespHeadersParsed: parseHeadersToMap(string(result.Headers)),
 		RespBody:          previewBody(result.Body, fullBodyMaxSize),
 		RespSize:          len(result.Body),
+	})
+}
+
+func (m *mcpServer) handleRequestSend(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	urlStr := req.GetString("url", "")
+	if urlStr == "" {
+		return errorResult("url is required"), nil
+	}
+
+	method := req.GetString("method", "GET")
+
+	// Parse headers from object
+	var headers map[string]string
+	if args := req.GetArguments(); args != nil {
+		if headersRaw, ok := args["headers"]; ok && headersRaw != nil {
+			if headersMap, ok := headersRaw.(map[string]interface{}); ok {
+				headers = make(map[string]string)
+				for k, v := range headersMap {
+					if vs, ok := v.(string); ok {
+						headers[k] = vs
+					}
+				}
+			}
+		}
+	}
+
+	body := []byte(req.GetString("body", ""))
+
+	parsedURL, err := parseURLWithDefaultHTTPS(urlStr)
+	if err != nil {
+		return errorResult("invalid URL: " + err.Error()), nil
+	}
+
+	rawRequest := buildRawRequest(method, parsedURL, headers, body)
+	target := targetFromURL(parsedURL)
+	replayID := ids.Generate(ids.DefaultLength)
+
+	log.Printf("mcp/request_send: %s sending to %s", replayID, parsedURL)
+
+	var timeout time.Duration
+	if timeoutStr := req.GetString("timeout", ""); timeoutStr != "" {
+		parsed, err := time.ParseDuration(timeoutStr)
+		if err != nil {
+			return errorResult("invalid timeout duration: " + err.Error()), nil
+		}
+		timeout = parsed
+	}
+
+	sendInput := SendRequestInput{
+		RawRequest:      rawRequest,
+		Target:          target,
+		FollowRedirects: req.GetBool("follow_redirects", false),
+		Timeout:         timeout,
+	}
+
+	result, err := m.service.httpBackend.SendRequest(ctx, "sectool-"+replayID, sendInput)
+	if err != nil {
+		return errorResult("request failed: " + err.Error()), nil
+	}
+
+	respCode, respStatusLine := parseResponseStatus(result.Headers)
+	log.Printf("mcp/request_send: %s completed in %v (status=%d, size=%d)", replayID, result.Duration, respCode, len(result.Body))
+
+	m.service.requestStore.Store(replayID, &store.RequestEntry{
+		Headers:  result.Headers,
+		Body:     result.Body,
+		Duration: result.Duration,
+	})
+
+	return jsonResult(ReplaySendResponse{
+		ReplayID: replayID,
+		Duration: result.Duration.String(),
+		ResponseDetails: ResponseDetails{
+			Status:      respCode,
+			StatusLine:  respStatusLine,
+			RespHeaders: string(result.Headers),
+			RespSize:    len(result.Body),
+			RespPreview: previewBody(result.Body, responsePreviewSize),
+		},
 	})
 }
 

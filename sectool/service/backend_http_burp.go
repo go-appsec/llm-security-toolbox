@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -309,24 +308,6 @@ func resolveRedirectLocation(location string, currentTarget Target, currentPath 
 		resolved = "/" + resolved
 	}
 	return currentTarget, resolved, nil
-}
-
-// targetFromURL extracts a Target from a parsed URL.
-func targetFromURL(u *url.URL) Target {
-	t := Target{
-		Hostname:  u.Hostname(),
-		UsesHTTPS: u.Scheme == "https",
-	}
-
-	if u.Port() != "" {
-		t.Port, _ = strconv.Atoi(u.Port())
-	} else if t.UsesHTTPS {
-		t.Port = 443
-	} else {
-		t.Port = 80
-	}
-
-	return t
 }
 
 // copyHeadersForRedirect copies headers from original request to buffer,

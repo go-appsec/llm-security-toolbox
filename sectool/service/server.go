@@ -320,6 +320,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("POST /replay/send", s.handleReplaySend)
 	mux.HandleFunc("POST /replay/get", s.handleReplayGet)
+	mux.HandleFunc("POST /replay/create", s.handleReplayCreate)
 
 	mux.HandleFunc("POST /oast/create", s.handleOastCreate)
 	mux.HandleFunc("POST /oast/poll", s.handleOastPoll)

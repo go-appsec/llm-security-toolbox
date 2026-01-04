@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -244,7 +245,7 @@ func TestValidateRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			issues := validateRequest([]byte(tt.raw))
-			hasErrors := slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == "error" })
+			hasErrors := slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == severityError })
 			if tt.hasErrors {
 				assert.True(t, hasErrors)
 			} else {
@@ -633,6 +634,112 @@ func TestHandleReplayGet(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.False(t, resp.OK)
 		assert.Equal(t, ErrCodeNotFound, resp.Error.Code)
+	})
+}
+
+func TestHandleReplayCreate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("simple_get", func(t *testing.T) {
+		srv, _, workDir := testServerWithMCP(t)
+
+		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+			URL: "https://example.com/api/users",
+		})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var createResp ReplayCreateResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &createResp))
+		assert.NotEmpty(t, createResp.BundleID)
+		assert.NotEmpty(t, createResp.BundlePath)
+
+		// Verify bundle files exist
+		assert.FileExists(t, filepath.Join(createResp.BundlePath, "request.http"))
+		assert.FileExists(t, filepath.Join(createResp.BundlePath, "body"))
+		assert.FileExists(t, filepath.Join(createResp.BundlePath, "request.meta.json"))
+
+		// Verify request content
+		reqContent, err := os.ReadFile(filepath.Join(createResp.BundlePath, "request.http"))
+		require.NoError(t, err)
+		assert.Contains(t, string(reqContent), "GET /api/users HTTP/1.1")
+		assert.Contains(t, string(reqContent), "Host: example.com")
+
+		// Verify bundle is within workdir
+		assert.True(t, strings.HasPrefix(createResp.BundlePath, workDir))
+	})
+
+	t.Run("post_with_body_and_headers", func(t *testing.T) {
+		srv, _, _ := testServerWithMCP(t)
+
+		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+			URL:    "https://api.example.com/users",
+			Method: "POST",
+			Headers: map[string]string{
+				"Content-Type":  "application/json",
+				"Authorization": "Bearer token123",
+			},
+			Body: `{"name":"test"}`,
+		})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var createResp ReplayCreateResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &createResp))
+
+		// Verify request content
+		reqContent, err := os.ReadFile(filepath.Join(createResp.BundlePath, "request.http"))
+		require.NoError(t, err)
+		assert.Contains(t, string(reqContent), "POST /users HTTP/1.1")
+		assert.Contains(t, string(reqContent), "Host: api.example.com")
+
+		// Verify body
+		bodyContent, err := os.ReadFile(filepath.Join(createResp.BundlePath, "body"))
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"name":"test"}`, string(bodyContent))
+	})
+
+	t.Run("url_without_scheme", func(t *testing.T) {
+		srv, _, _ := testServerWithMCP(t)
+
+		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+			URL: "example.com/api",
+		})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var createResp ReplayCreateResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &createResp))
+
+		// Verify defaults to HTTPS
+		reqContent, err := os.ReadFile(filepath.Join(createResp.BundlePath, "request.http"))
+		require.NoError(t, err)
+		assert.Contains(t, string(reqContent), "GET /api HTTP/1.1")
+	})
+
+	t.Run("missing_url", func(t *testing.T) {
+		srv, _, _ := testServerWithMCP(t)
+
+		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{})
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.False(t, resp.OK)
+		assert.Equal(t, ErrCodeInvalidRequest, resp.Error.Code)
 	})
 }
 

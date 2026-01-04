@@ -632,3 +632,237 @@ func TestPreviewBody(t *testing.T) {
 		})
 	}
 }
+
+func TestParseURLWithDefaultHTTPS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		input      string
+		wantScheme string
+		wantHost   string
+		wantPath   string
+		wantErr    bool
+	}{
+		{
+			name:       "full_https_url",
+			input:      "https://example.com/api/users",
+			wantScheme: "https",
+			wantHost:   "example.com",
+			wantPath:   "/api/users",
+		},
+		{
+			name:       "full_http_url",
+			input:      "http://example.com/api/users",
+			wantScheme: "http",
+			wantHost:   "example.com",
+			wantPath:   "/api/users",
+		},
+		{
+			name:       "no_scheme_defaults_https",
+			input:      "example.com/api/users",
+			wantScheme: "https",
+			wantHost:   "example.com",
+			wantPath:   "/api/users",
+		},
+		{
+			name:       "no_scheme_with_port",
+			input:      "example.com:8443/api",
+			wantScheme: "https",
+			wantHost:   "example.com:8443",
+			wantPath:   "/api",
+		},
+		{
+			name:       "no_scheme_root_path",
+			input:      "example.com",
+			wantScheme: "https",
+			wantHost:   "example.com",
+			wantPath:   "",
+		},
+		{
+			name:       "with_query_string",
+			input:      "example.com/search?q=test",
+			wantScheme: "https",
+			wantHost:   "example.com",
+			wantPath:   "/search",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := parseURLWithDefaultHTTPS(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantScheme, u.Scheme)
+			assert.Equal(t, tc.wantHost, u.Host)
+			assert.Equal(t, tc.wantPath, u.Path)
+		})
+	}
+}
+
+func TestTargetFromURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		url       string
+		wantHost  string
+		wantPort  int
+		wantHTTPS bool
+	}{
+		{
+			name:      "https_default_port",
+			url:       "https://example.com/api",
+			wantHost:  "example.com",
+			wantPort:  443,
+			wantHTTPS: true,
+		},
+		{
+			name:      "http_default_port",
+			url:       "http://example.com/api",
+			wantHost:  "example.com",
+			wantPort:  80,
+			wantHTTPS: false,
+		},
+		{
+			name:      "https_custom_port",
+			url:       "https://example.com:8443/api",
+			wantHost:  "example.com",
+			wantPort:  8443,
+			wantHTTPS: true,
+		},
+		{
+			name:      "http_custom_port",
+			url:       "http://example.com:8080/api",
+			wantHost:  "example.com",
+			wantPort:  8080,
+			wantHTTPS: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := parseURLWithDefaultHTTPS(tc.url)
+			require.NoError(t, err)
+			target := targetFromURL(u)
+			assert.Equal(t, tc.wantHost, target.Hostname)
+			assert.Equal(t, tc.wantPort, target.Port)
+			assert.Equal(t, tc.wantHTTPS, target.UsesHTTPS)
+		})
+	}
+}
+
+func TestBuildRawRequest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		method       string
+		url          string
+		headers      map[string]string
+		body         []byte
+		wantContains []string
+	}{
+		{
+			name:    "simple_get",
+			method:  "GET",
+			url:     "https://example.com/api/users",
+			headers: nil,
+			body:    nil,
+			wantContains: []string{
+				"GET /api/users HTTP/1.1\r\n",
+				"Host: example.com\r\n",
+				"User-Agent: " + userAgent + "\r\n",
+			},
+		},
+		{
+			name:    "get_with_query",
+			method:  "GET",
+			url:     "https://example.com/search?q=test",
+			headers: nil,
+			body:    nil,
+			wantContains: []string{
+				"GET /search?q=test HTTP/1.1\r\n",
+				"Host: example.com\r\n",
+			},
+		},
+		{
+			name:   "post_with_body",
+			method: "POST",
+			url:    "https://api.example.com/users",
+			headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			body: []byte(`{"name":"test"}`),
+			wantContains: []string{
+				"POST /users HTTP/1.1\r\n",
+				"Host: api.example.com\r\n",
+				"Content-Type: application/json\r\n",
+				"Content-Length: 15\r\n",
+				`{"name":"test"}`,
+			},
+		},
+		{
+			name:   "with_auth_header",
+			method: "GET",
+			url:    "https://api.example.com/protected",
+			headers: map[string]string{
+				"Authorization": "Bearer token123",
+			},
+			body: nil,
+			wantContains: []string{
+				"GET /protected HTTP/1.1\r\n",
+				"Authorization: Bearer token123\r\n",
+			},
+		},
+		{
+			name:   "custom_host_header",
+			method: "GET",
+			url:    "https://example.com/path",
+			headers: map[string]string{
+				"Host": "custom.host.com",
+			},
+			body: nil,
+			wantContains: []string{
+				"GET /path HTTP/1.1\r\n",
+				"Host: custom.host.com\r\n",
+			},
+		},
+		{
+			name:    "root_path",
+			method:  "GET",
+			url:     "https://example.com",
+			headers: nil,
+			body:    nil,
+			wantContains: []string{
+				"GET / HTTP/1.1\r\n",
+				"Host: example.com\r\n",
+			},
+		},
+		{
+			name:    "with_port",
+			method:  "GET",
+			url:     "https://example.com:8443/api",
+			headers: nil,
+			body:    nil,
+			wantContains: []string{
+				"GET /api HTTP/1.1\r\n",
+				"Host: example.com:8443\r\n",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := parseURLWithDefaultHTTPS(tc.url)
+			require.NoError(t, err)
+			result := string(buildRawRequest(tc.method, u, tc.headers, tc.body))
+			for _, want := range tc.wantContains {
+				assert.Contains(t, result, want)
+			}
+		})
+	}
+}

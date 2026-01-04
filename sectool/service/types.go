@@ -335,6 +335,20 @@ type ReplayGetResponse struct {
 	RespSize          int                 `json:"response_size"`
 }
 
+// ReplayCreateRequest is the request for POST /replay/create.
+type ReplayCreateRequest struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    string            `json:"body,omitempty"`
+}
+
+// ReplayCreateResponse is the response for POST /replay/create.
+type ReplayCreateResponse struct {
+	BundleID   string `json:"bundle_id"`
+	BundlePath string `json:"bundle_path"`
+}
+
 // =============================================================================
 // OAST Types
 // =============================================================================

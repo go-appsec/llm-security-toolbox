@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
@@ -105,9 +106,14 @@ func checkLineEndings(headers []byte) string {
 // validationIssue represents a single validation problem.
 type validationIssue struct {
 	Check    string
-	Severity string // "error" or "warning"
+	Severity string // severityError or severityWarning
 	Detail   string
 }
+
+const (
+	severityError   = "error"
+	severityWarning = "warning"
+)
 
 // validateRequest checks request for common issues.
 func validateRequest(raw []byte) []validationIssue {
@@ -120,7 +126,7 @@ func validateRequest(raw []byte) []validationIssue {
 	if issue := checkLineEndings(headers); issue != "" {
 		issues = append(issues, validationIssue{
 			Check:    "crlf",
-			Severity: "error",
+			Severity: severityError,
 			Detail:   issue + "; HTTP requires CRLF (\\r\\n) line endings, use --force to send anyway",
 		})
 		// Skip further validation since parse will fail due to line endings
@@ -135,7 +141,7 @@ func validateRequest(raw []byte) []validationIssue {
 	if err != nil {
 		issues = append(issues, validationIssue{
 			Check:    "parse",
-			Severity: "error",
+			Severity: severityError,
 			Detail:   err.Error(),
 		})
 	}
@@ -147,7 +153,7 @@ func validateRequest(raw []byte) []validationIssue {
 		if cl != len(body) {
 			issues = append(issues, validationIssue{
 				Check:    "content_length",
-				Severity: "error",
+				Severity: severityError,
 				Detail:   fmt.Sprintf("header says %d, body is %d bytes", cl, len(body)),
 			})
 		}
@@ -157,7 +163,7 @@ func validateRequest(raw []byte) []validationIssue {
 	if !regexp.MustCompile(`(?im)^Host:`).Match(headers) {
 		issues = append(issues, validationIssue{
 			Check:    "host",
-			Severity: "warning",
+			Severity: severityWarning,
 			Detail:   "missing Host header",
 		})
 	}
@@ -344,7 +350,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 	// Validate unless --force is set (for testing malformed requests)
 	if !req.Force {
 		issues := validateRequest(rawRequest)
-		if slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == "error" }) {
+		if slices.ContainsFunc(issues, func(i validationIssue) bool { return i.Severity == severityError }) {
 			s.writeError(w, http.StatusBadRequest, ErrCodeValidation, "validation failed", formatIssues(issues))
 			return
 		}
@@ -450,5 +456,62 @@ func (s *Server) handleReplayGet(w http.ResponseWriter, r *http.Request) {
 		RespHeaders: string(result.Headers),
 		RespBody:    previewBody(result.Body, fullBodyMaxSize),
 		RespSize:    len(result.Body),
+	})
+}
+
+// handleReplayCreate handles POST /replay/create
+func (s *Server) handleReplayCreate(w http.ResponseWriter, r *http.Request) {
+	var req ReplayCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "invalid request body", err.Error())
+		return
+	}
+
+	if req.URL == "" {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "url is required", "")
+		return
+	}
+
+	// Default method to GET
+	method := req.Method
+	if method == "" {
+		method = "GET"
+	}
+
+	parsedURL, err := parseURLWithDefaultHTTPS(req.URL)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "invalid URL", err.Error())
+		return
+	}
+
+	var body []byte
+	if req.Body != "" {
+		body = []byte(req.Body)
+	}
+
+	rawRequest := buildRawRequest(method, parsedURL, req.Headers, body)
+
+	bundleID := ids.Generate(ids.DefaultLength)
+	bundlePath := filepath.Join(s.paths.RequestsDir, bundleID)
+
+	headers, bodyPart := splitHeadersBody(rawRequest)
+
+	meta := &bundleMeta{
+		BundleID:   bundleID,
+		URL:        parsedURL.String(),
+		Method:     method,
+		BodyIsUTF8: utf8.Valid(bodyPart),
+		BodySize:   len(bodyPart),
+	}
+
+	if err := writeBundle(bundlePath, headers, bodyPart, meta); err != nil {
+		s.writeError(w, http.StatusInternalServerError, ErrCodeInternal, "failed to write bundle", err.Error())
+		return
+	}
+
+	log.Printf("replay/create: created bundle %s at %s", bundleID, bundlePath)
+	s.writeJSON(w, http.StatusOK, ReplayCreateResponse{
+		BundleID:   bundleID,
+		BundlePath: bundlePath,
 	})
 }

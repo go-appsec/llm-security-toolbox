@@ -21,48 +21,46 @@ make lint           # Run golangci-lint and go vet
 
 ## Architecture
 
-| File | Description |
-|------|-------------|
-| `main.go` | Entry point; routes --service flag to daemon mode, else CLI command parsing and dispatch |
-| `config/config.go` | Config loading/saving, defaults |
-| `config/config_test.go` | Config tests |
-| `service/server.go` | HTTP server over Unix socket |
-| `service/client.go` | Auto-starts service if needed |
-| `service/types.go` | Shared API types (ServicePaths, APIResponse, APIError) |
-| `service/flags.go` | Service subcommand parsing |
-| `service/commands.go` | Service CLI implementations (status/stop/logs) |
-| `service/backend.go` | HttpBackend and OastBackend interface definitions |
-| `service/backend_http_burp.go` | Burp MCP implementation of HttpBackend |
-| `service/backend_oast_interactsh.go` | Interactsh implementation of OastBackend |
-| `service/proxy_handler.go` | Handles /proxy/summary, /proxy/list, /proxy/export |
-| `service/replay_handler.go` | Handles /replay/send, /replay/get |
-| `service/oast_handler.go` | Handles /oast/* endpoints |
-| `service/mcp_server.go` | MCP SSE server exposing tools for agent integration |
-| `service/httputil.go` | HTTP parsing utilities |
-| `service/bundle.go` | Request bundle file operations |
-| `service/mcp/burp.go` | SSE-based Burp Suite MCP client |
-| `service/mcp/types.go` | MCP-specific types |
-| `service/store/flow.go` | Flow ID → Burp offset mapping (thread-safe) |
-| `service/store/hash.go` | Content hashing for flow identity |
-| `service/store/request.go` | Replay result storage with TTL cleanup |
-| `service/ids/ids.go` | Base62 random IDs using crypto/rand |
-| `service/socket_security.go` | Secure listener wrapper, socket path validation |
-| `service/socket_security_{linux,darwin,other}.go` | Peer credential verification (SO_PEERCRED/LOCAL_PEERCRED) |
-| `proxy/flags.go` | Subcommand parsing (list/export/intercept/rule) |
-| `proxy/proxy.go` | Shared client proxy utilities |
-| `proxy/list.go` | List command implementation |
-| `proxy/export.go` | Export command implementation |
-| `proxy/rule.go` | Rule CRUD command implementations |
-| `replay/flags.go` | Subcommand parsing (send/get) |
-| `replay/replay.go` | Command implementations |
-| `oast/flags.go` | Subcommand parsing (create/poll/list/delete) |
-| `oast/oast.go` | Command implementations |
-| `encode/flags.go` | Subcommand parsing (url/base64/html) |
-| `encode/encode.go` | Encoding/decoding implementations |
-| `initialize/flags.go` | Subcommand parsing (explore/test-report) |
-| `initialize/init.go` | Initialization logic |
-| `initialize/templates/AGENT-explore.md` | Embedded exploration guide |
-| `initialize/templates/AGENT-test-report.md` | Embedded test-report guide |
+- `sectool/main.go` - Entry point; routes --service flag to daemon mode, else CLI command parsing and dispatch
+- `sectool/config/config.go` - Config loading/saving, defaults
+- `sectool/config/config_test.go` - Config tests
+- `sectool/service/server.go` - HTTP server over Unix socket
+- `sectool/service/client.go` - Auto-starts service if needed
+- `sectool/service/types.go` - Shared API types (ServicePaths, APIResponse, APIError)
+- `sectool/service/flags.go` - Service subcommand parsing
+- `sectool/service/commands.go` - Service CLI implementations (status/stop/logs)
+- `sectool/service/backend.go` - HttpBackend and OastBackend interface definitions
+- `sectool/service/backend_http_burp.go` - Burp MCP implementation of HttpBackend
+- `sectool/service/backend_oast_interactsh.go` - Interactsh implementation of OastBackend
+- `sectool/service/proxy_handler.go` - Handles /proxy/summary, /proxy/list, /proxy/export
+- `sectool/service/replay_handler.go` - Handles /replay/send, /replay/get
+- `sectool/service/oast_handler.go` - Handles /oast/* endpoints
+- `sectool/service/mcp_server.go` - MCP SSE server exposing tools for agent integration
+- `sectool/service/httputil.go` - HTTP parsing utilities
+- `sectool/service/bundle.go` - Request bundle file operations
+- `sectool/service/mcp/burp.go` - SSE-based Burp Suite MCP client
+- `sectool/service/mcp/types.go` - MCP-specific types
+- `sectool/service/store/flow.go` - Flow ID → Burp offset mapping (thread-safe)
+- `sectool/service/store/hash.go` - Content hashing for flow identity
+- `sectool/service/store/request.go` - Replay result storage with TTL cleanup
+- `sectool/service/ids/ids.go` - Base62 random IDs using crypto/rand
+- `sectool/service/socket_security.go` - Secure listener wrapper, socket path validation
+- `sectool/service/socket_security_{linux,darwin,other}.go` - Peer credential verification (SO_PEERCRED/LOCAL_PEERCRED)
+- `sectool/proxy/flags.go` - Subcommand parsing (list/export/intercept/rule)
+- `sectool/proxy/proxy.go` - Shared client proxy utilities
+- `sectool/proxy/list.go` - List command implementation
+- `sectool/proxy/export.go` - Export command implementation
+- `sectool/proxy/rule.go` - Rule CRUD command implementations
+- `sectool/replay/flags.go` - Subcommand parsing (send/get)
+- `sectool/replay/replay.go` - Command implementations
+- `sectool/oast/flags.go` - Subcommand parsing (create/poll/list/delete)
+- `sectool/oast/oast.go` - Command implementations
+- `sectool/encode/flags.go` - Subcommand parsing (url/base64/html)
+- `sectool/encode/encode.go` - Encoding/decoding implementations
+- `sectool/initialize/flags.go` - Subcommand parsing (explore/test-report)
+- `sectool/initialize/init.go` - Initialization logic
+- `sectool/initialize/templates/AGENT-explore.md` - Embedded exploration guide
+- `sectool/initialize/templates/AGENT-test-report.md` - Embedded test-report guide
 
 **Service lifecycle:**
 1. CLI command runs → client checks for existing service via socket
