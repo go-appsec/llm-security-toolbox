@@ -15,10 +15,11 @@ import (
 const DefaultMCPPort = 9119
 
 type DaemonFlags struct {
-	WorkDir    string
-	BurpMCPURL string
-	MCP        bool
-	MCPPort    int
+	WorkDir         string
+	BurpMCPURL      string
+	MCP             bool
+	MCPPort         int
+	DisableWorkflow bool
 }
 
 func ParseDaemonFlags(args []string) (DaemonFlags, error) {
@@ -37,6 +38,7 @@ func ParseDaemonFlags(args []string) (DaemonFlags, error) {
 	fs.StringVar(&flags.BurpMCPURL, "burp-mcp-url", flags.BurpMCPURL, "Burp MCP SSE endpoint URL")
 	fs.BoolVar(&flags.MCP, "mcp", false, "enable MCP SSE server")
 	fs.IntVar(&flags.MCPPort, "mcp-port", flags.MCPPort, "MCP SSE server port")
+	fs.BoolVar(&flags.DisableWorkflow, "disable-workflow", false, "disable workflow tool requirement in MCP mode")
 
 	if err := fs.Parse(args); err != nil {
 		return flags, err
@@ -99,6 +101,7 @@ instructions for Claude Code and Codex will be printed on startup.
 Options:
   --mcp                  Enable MCP SSE server
   --mcp-port PORT        MCP server port (default: 9119)
+  --disable-workflow     Disable workflow tool requirement
 `)
 }
 

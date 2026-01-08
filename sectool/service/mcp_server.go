@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -29,10 +30,13 @@ type mcpServer struct {
 	sseServer *server.SSEServer
 	listener  net.Listener
 	service   *Server
+
+	workflowEnabled     bool
+	workflowInitialized atomic.Bool
 }
 
 // newMCPServer creates a new MCP server instance.
-func newMCPServer(svc *Server) *mcpServer {
+func newMCPServer(svc *Server, workflowEnabled bool) *mcpServer {
 	mcpSrv := server.NewMCPServer(
 		"sectool",
 		config.Version,
@@ -41,8 +45,9 @@ func newMCPServer(svc *Server) *mcpServer {
 	)
 
 	m := &mcpServer{
-		server:  mcpSrv,
-		service: svc,
+		server:          mcpSrv,
+		service:         svc,
+		workflowEnabled: workflowEnabled,
 	}
 
 	m.registerTools()
@@ -89,6 +94,11 @@ func (m *mcpServer) Close(ctx context.Context) error {
 
 // registerTools registers all MCP tools.
 func (m *mcpServer) registerTools() {
+	// Workflow tool (when enabled)
+	if m.workflowEnabled {
+		m.server.AddTool(m.workflowTool(), m.handleWorkflow)
+	}
+
 	// Proxy tools
 	m.server.AddTool(m.proxySummaryTool(), m.handleProxySummary)
 	m.server.AddTool(m.proxyListTool(), m.handleProxyList)
@@ -116,9 +126,94 @@ func (m *mcpServer) registerTools() {
 	m.server.AddTool(m.encodeHTMLTool(), m.handleEncodeHTML)
 }
 
+const workflowNotInitializedError = "call workflow first with the relevant task, use 'explore' if there is no better fit"
+
+// requireWorkflow returns an error result if workflow is required but not initialized, nil otherwise.
+func (m *mcpServer) requireWorkflow() *mcp.CallToolResult {
+	if m.workflowEnabled && !m.workflowInitialized.Load() {
+		return errorResult(workflowNotInitializedError)
+	}
+	return nil
+}
+
+func (m *mcpServer) workflowTool() mcp.Tool {
+	return mcp.NewTool("workflow",
+		mcp.WithDescription(`Initialize sectool workflow - MUST be called before using other tools.
+
+Select the task that best matches your objective:
+- test-report: Validating a specific vulnerability report
+- explore: Security testing and vulnerability discovery (default if unsure)
+
+Returns necessary instructions on tool use and user interaction  strategies.`),
+		mcp.WithString("task", mcp.Required(), mcp.Description("Workflow type: 'test-report' for validating vulnerability reports, 'explore' for security testing/discovery")),
+	)
+}
+
+func (m *mcpServer) handleWorkflow(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	task := req.GetString("task", "explore")
+
+	var content string
+	switch task {
+	case "explore":
+		content = workflowExploreContent
+	case "test-report":
+		content = workflowTestReportContent
+	default:
+		return errorResult("invalid task: use 'explore' or 'test-report'"), nil
+	}
+
+	m.workflowInitialized.Store(true)
+	log.Printf("mcp/workflow: initialized with task=%s", task)
+
+	return mcp.NewToolResultText(content), nil
+}
+
+var workflowExploreContent = `# Security Testing Workflow
+
+Collaborate with the user to probe and discover security vulnerabilities.
+
+## Collaboration Model
+
+**Your role:** Analyze traffic, identify vulnerabilities, craft/replay requests, monitor OAST interactions, suggest attack strategies.
+
+**User's role:** Browser navigation, authentication, trigger UI actions, provide application context, answer questions to help.
+
+**Key principle:** Work collaboratively - don't assume, ask when uncertain about scope, behavior.
+
+## Common Workflow
+
+1. User provides testing context/scope - ask for clarification if needed
+2. User generates traffic via browser; you monitor with proxy_summary then proxy_list
+3. Identify interesting endpoints and potential vulnerabilities
+4. Test hypotheses using sectool (often replay_send with modifications)
+5. Report findings, discuss next steps, explore multiple angles in parallel
+`
+
+var workflowTestReportContent = `# Vulnerability Validation Workflow
+
+Collaborate with the user to validate a reported security vulnerability.
+
+## Collaboration Model
+
+**Your role:** Be helpful in verifying the claimed behavior by analyzing the proxy traffic, craft and replay requests, monitor OAST interactions, and suggest additional attack strategies to verify impact.
+
+**User's role:** Browser navigation, authentication, trigger UI actions, provide application context, answer questions to help.
+
+**Key principle:** Work collaboratively - don't assume, ask when uncertain about scope, reproduction steps, behavior.
+
+## Common Workflow
+
+1. User provides vulnerability report - understand claimed issue and impact
+2. Build verification plan together: prerequisites, step-by-step actions, expected behavior
+3. User performs browser actions; you analyze captured traffic
+4. Utilize sectool commands including replaying and modifying requests to assist in verifying the issue
+5. Assess: Is it exploitable as described? Mitigating controls? Related variants?
+6. Discuss results and additional testing permutations that should be considered
+`
+
 func (m *mcpServer) proxySummaryTool() mcp.Tool {
 	return mcp.NewTool("proxy_summary",
-		mcp.WithDescription(`Get aggregated summary of Burp proxy history.
+		mcp.WithDescription(`Get aggregated summary of proxy history.
 
 Returns traffic grouped by (host, path, method, status), sorted by count descending.
 Use this first to understand available traffic before using proxy_list with specific filters.
@@ -138,7 +233,7 @@ method/status are comma-separated. contains searches URL+headers; contains_body 
 
 func (m *mcpServer) proxyListTool() mcp.Tool {
 	return mcp.NewTool("proxy_list",
-		mcp.WithDescription(`Query Burp proxy history for individual flows.
+		mcp.WithDescription(`Query proxy history for individual flows.
 
 Returns individual flows with flow_id for use with proxy_get or replay_send.
 At least one filter or limit is REQUIRED. Use proxy_summary first to understand available traffic.
@@ -171,7 +266,7 @@ Use flow_id from proxy_list to identify the entry.`),
 
 func (m *mcpServer) proxyRuleListTool() mcp.Tool {
 	return mcp.NewTool("proxy_rule_list",
-		mcp.WithDescription("List Burp proxy match/replace rules. Use type_filter to control which rules are returned."),
+		mcp.WithDescription("List proxy match/replace rules. Use type_filter to control which rules are returned."),
 		mcp.WithString("type_filter", mcp.Description("Filter by rule type: 'http', 'websocket', or 'all' (default: 'all')")),
 		mcp.WithNumber("limit", mcp.Description("Maximum number of rules to return")),
 	)
@@ -179,7 +274,7 @@ func (m *mcpServer) proxyRuleListTool() mcp.Tool {
 
 func (m *mcpServer) proxyRuleAddTool() mcp.Tool {
 	return mcp.NewTool("proxy_rule_add",
-		mcp.WithDescription(`Add Burp proxy match/replace rule. Persists across all traffic (vs replay_send for one-off edits).
+		mcp.WithDescription(`Add proxy match/replace rule. Persists across all traffic (vs replay_send for one-off edits).
 
 Types:
   HTTP:      request_header (default), request_body, response_header, response_body
@@ -196,7 +291,7 @@ Regex: is_regex=true (Java regex). Labels must be unique.`),
 
 func (m *mcpServer) proxyRuleUpdateTool() mcp.Tool {
 	return mcp.NewTool("proxy_rule_update",
-		mcp.WithDescription(`Update a Burp match/replace rule by rule_id or label (searches HTTP+WS).
+		mcp.WithDescription(`Update a proxy match/replace rule by rule_id or label (searches HTTP+WS).
 
 Requires at least match or replace. To rename label only, resend existing values with new label.`),
 		mcp.WithString("rule_id", mcp.Required(), mcp.Description("Rule ID or label to update")),
@@ -210,7 +305,7 @@ Requires at least match or replace. To rename label only, resend existing values
 
 func (m *mcpServer) proxyRuleDeleteTool() mcp.Tool {
 	return mcp.NewTool("proxy_rule_delete",
-		mcp.WithDescription("Delete a Burp match/replace rule by rule_id or label (searches HTTP+WS)."),
+		mcp.WithDescription("Delete a proxy match/replace rule by rule_id or label (searches HTTP+WS)."),
 		mcp.WithString("rule_id", mcp.Required(), mcp.Description("Rule ID or label to delete")),
 	)
 }
@@ -351,6 +446,10 @@ func (m *mcpServer) encodeHTMLTool() mcp.Tool {
 }
 
 func (m *mcpServer) handleProxySummary(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	listReq := &ProxyListRequest{
 		Host:         req.GetString("host", ""),
 		Path:         req.GetString("path", ""),
@@ -371,6 +470,10 @@ func (m *mcpServer) handleProxySummary(ctx context.Context, req mcp.CallToolRequ
 }
 
 func (m *mcpServer) handleProxyList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	listReq := &ProxyListRequest{
 		Host:         req.GetString("host", ""),
 		Path:         req.GetString("path", ""),
@@ -397,6 +500,10 @@ func (m *mcpServer) handleProxyList(ctx context.Context, req mcp.CallToolRequest
 }
 
 func (m *mcpServer) handleProxyGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	flowID := req.GetString("flow_id", "")
 	if flowID == "" {
 		return errorResult("flow_id is required"), nil
@@ -455,6 +562,10 @@ func (m *mcpServer) handleProxyGet(ctx context.Context, req mcp.CallToolRequest)
 }
 
 func (m *mcpServer) handleProxyRuleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	typeFilter := req.GetString("type_filter", "all")
 	limit := req.GetInt("limit", 0)
 
@@ -495,6 +606,10 @@ func (m *mcpServer) handleProxyRuleList(ctx context.Context, req mcp.CallToolReq
 }
 
 func (m *mcpServer) handleProxyRuleAdd(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	ruleType := req.GetString("type", "")
 	if ruleType == "" {
 		return errorResult("type is required"), nil
@@ -531,6 +646,10 @@ func (m *mcpServer) handleProxyRuleAdd(ctx context.Context, req mcp.CallToolRequ
 }
 
 func (m *mcpServer) handleProxyRuleUpdate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	ruleID := req.GetString("rule_id", "")
 	if ruleID == "" {
 		return errorResult("rule_id is required"), nil
@@ -572,6 +691,10 @@ func (m *mcpServer) handleProxyRuleUpdate(ctx context.Context, req mcp.CallToolR
 }
 
 func (m *mcpServer) handleProxyRuleDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	ruleID := req.GetString("rule_id", "")
 	if ruleID == "" {
 		return errorResult("rule_id is required"), nil
@@ -589,6 +712,10 @@ func (m *mcpServer) handleProxyRuleDelete(ctx context.Context, req mcp.CallToolR
 }
 
 func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	flowID := req.GetString("flow_id", "")
 	if flowID == "" {
 		return errorResult("flow_id is required"), nil
@@ -715,6 +842,10 @@ func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolReques
 }
 
 func (m *mcpServer) handleReplayGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	replayID := req.GetString("replay_id", "")
 	if replayID == "" {
 		return errorResult("replay_id is required"), nil
@@ -741,6 +872,10 @@ func (m *mcpServer) handleReplayGet(ctx context.Context, req mcp.CallToolRequest
 }
 
 func (m *mcpServer) handleRequestSend(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	urlStr := req.GetString("url", "")
 	if urlStr == "" {
 		return errorResult("url is required"), nil
@@ -820,6 +955,10 @@ func (m *mcpServer) handleRequestSend(ctx context.Context, req mcp.CallToolReque
 }
 
 func (m *mcpServer) handleOastCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	label := req.GetString("label", "")
 
 	sess, err := m.service.oastBackend.CreateSession(ctx, label)
@@ -836,6 +975,10 @@ func (m *mcpServer) handleOastCreate(ctx context.Context, req mcp.CallToolReques
 }
 
 func (m *mcpServer) handleOastPoll(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	oastID := req.GetString("oast_id", "")
 	if oastID == "" {
 		return errorResult("oast_id is required"), nil
@@ -886,6 +1029,10 @@ func (m *mcpServer) handleOastPoll(ctx context.Context, req mcp.CallToolRequest)
 }
 
 func (m *mcpServer) handleOastGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	oastID := req.GetString("oast_id", "")
 	if oastID == "" {
 		return errorResult("oast_id is required"), nil
@@ -916,6 +1063,10 @@ func (m *mcpServer) handleOastGet(ctx context.Context, req mcp.CallToolRequest) 
 }
 
 func (m *mcpServer) handleOastList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	limit := req.GetInt("limit", 0)
 
 	resp, err := m.service.processOastList(ctx, limit)
@@ -927,6 +1078,10 @@ func (m *mcpServer) handleOastList(ctx context.Context, req mcp.CallToolRequest)
 }
 
 func (m *mcpServer) handleOastDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
 	oastID := req.GetString("oast_id", "")
 	if oastID == "" {
 		return errorResult("oast_id is required"), nil
