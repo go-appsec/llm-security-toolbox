@@ -795,6 +795,7 @@ func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolReques
 		Target:        req.GetString("target", ""),
 	}
 	headers = applyHeaderModifications(headers, sendReq)
+	headers = setHeaderIfMissing(headers, "User-Agent", config.UserAgent())
 
 	if body := req.GetString("body", ""); body != "" {
 		reqBody = []byte(body)

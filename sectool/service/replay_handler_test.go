@@ -130,6 +130,53 @@ func TestSetHeader(t *testing.T) {
 	}
 }
 
+func TestSetHeaderIfMissing(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		headers string
+		hName   string
+		hValue  string
+		want    string
+	}{
+		{
+			name:    "add_when_missing",
+			headers: "GET / HTTP/1.1\r\nHost: x\r\n\r\n",
+			hName:   "User-Agent",
+			hValue:  "sectool/1.0",
+			want:    "GET / HTTP/1.1\r\nHost: x\r\nUser-Agent: sectool/1.0\r\n\r\n",
+		},
+		{
+			name:    "skip_when_present",
+			headers: "GET / HTTP/1.1\r\nHost: x\r\nUser-Agent: existing\r\n\r\n",
+			hName:   "User-Agent",
+			hValue:  "sectool/1.0",
+			want:    "GET / HTTP/1.1\r\nHost: x\r\nUser-Agent: existing\r\n\r\n",
+		},
+		{
+			name:    "case_insensitive_skip",
+			headers: "GET / HTTP/1.1\r\nHost: x\r\nuser-agent: existing\r\n\r\n",
+			hName:   "User-Agent",
+			hValue:  "sectool/1.0",
+			want:    "GET / HTTP/1.1\r\nHost: x\r\nuser-agent: existing\r\n\r\n",
+		},
+		{
+			name:    "uppercase_skip",
+			headers: "GET / HTTP/1.1\r\nHost: x\r\nUSER-AGENT: existing\r\n\r\n",
+			hName:   "User-Agent",
+			hValue:  "sectool/1.0",
+			want:    "GET / HTTP/1.1\r\nHost: x\r\nUSER-AGENT: existing\r\n\r\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, string(setHeaderIfMissing([]byte(tt.headers), tt.hName, tt.hValue)))
+		})
+	}
+}
+
 func TestRemoveHeader(t *testing.T) {
 	t.Parallel()
 

@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
 )
@@ -50,6 +51,14 @@ func setHeader(headers []byte, name, value string) []byte {
 	// Insert before the blank line (preserve the first \r\n, which ends the previous header)
 	return bytes.Replace(headers, []byte("\r\n\r\n"),
 		append([]byte("\r\n"), append(newHeader, []byte("\r\n")...)...), 1)
+}
+
+func setHeaderIfMissing(headers []byte, name, value string) []byte {
+	re := regexp.MustCompile(`(?im)^` + regexp.QuoteMeta(name) + `:`)
+	if re.Match(headers) {
+		return headers
+	}
+	return setHeader(headers, name, value)
 }
 
 // removeHeader removes a header.
@@ -327,6 +336,7 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 	// Apply header modifications (--header, --remove-header, --target) regardless of --force
 	headers, body := splitHeadersBody(rawRequest)
 	headers = applyHeaderModifications(headers, &req)
+	headers = setHeaderIfMissing(headers, "User-Agent", config.UserAgent())
 
 	// Apply JSON body modifications if any
 	if len(req.SetJSON) > 0 || len(req.RemoveJSON) > 0 {
