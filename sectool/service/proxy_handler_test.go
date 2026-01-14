@@ -143,35 +143,6 @@ func TestPathWithoutQuery(t *testing.T) {
 	}
 }
 
-func TestNormalizePath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		path string
-		want string
-	}{
-		{"no_change", "/api/users", "/api/users"},
-		{"numeric", "/api/users/123", "/api/users/*"},
-		{"multiple_numeric", "/api/users/123/posts/456", "/api/users/*/posts/*"},
-		{"uuid", "/api/users/550e8400-e29b-41d4-a716-446655440000", "/api/users/*"},
-		{"uuid_no_dashes", "/api/users/550e8400e29b41d4a716446655440000", "/api/users/*"},
-		{"mongodb_objectid", "/api/users/507f1f77bcf86cd799439011", "/api/users/*"},
-		{"preserve_query", "/api/users/123?foo=bar", "/api/users/*?foo=bar"},
-		{"root", "/", "/"},
-		{"empty", "", ""},
-		{"trailing_slash", "/api/users/123/", "/api/users/*/"},
-		{"mixed", "/v2/orders/42/items/abc123def456789012345678", "/v2/orders/*/items/*"},
-		{"short_hex_unchanged", "/api/abc123", "/api/abc123"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, normalizePath(tt.path))
-		})
-	}
-}
-
 func TestAggregateByTuple(t *testing.T) {
 	t.Parallel()
 
@@ -478,7 +449,7 @@ func TestHandleProxyExport(t *testing.T) {
 		flowID := listResp.Flows[0].FlowID
 
 		// Export the flow
-		w = doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{FlowID: flowID})
+		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -486,7 +457,7 @@ func TestHandleProxyExport(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &exportAPIResp))
 		assert.True(t, exportAPIResp.OK)
 
-		var exportResp ProxyExportResponse
+		var exportResp FlowExportResponse
 		require.NoError(t, json.Unmarshal(exportAPIResp.Data, &exportResp))
 
 		assert.NotEmpty(t, exportResp.BundleID)
@@ -522,12 +493,12 @@ func TestHandleProxyExport(t *testing.T) {
 		require.Len(t, listResp.Flows, 1)
 
 		// Export the flow
-		w = doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{FlowID: listResp.Flows[0].FlowID})
+		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: listResp.Flows[0].FlowID})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var exportAPIResp APIResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &exportAPIResp))
-		var exportResp ProxyExportResponse
+		var exportResp FlowExportResponse
 		require.NoError(t, json.Unmarshal(exportAPIResp.Data, &exportResp))
 
 		// Read body and verify it matches original body exactly
@@ -540,7 +511,7 @@ func TestHandleProxyExport(t *testing.T) {
 	t.Run("not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{FlowID: "nonexistent"})
+		w := doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: "nonexistent"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -553,7 +524,7 @@ func TestHandleProxyExport(t *testing.T) {
 	t.Run("missing_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{})
+		w := doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -561,6 +532,99 @@ func TestHandleProxyExport(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.False(t, resp.OK)
 		assert.Equal(t, ErrCodeInvalidRequest, resp.Error.Code)
+	})
+
+	t.Run("bundle_id_equals_flow_id", func(t *testing.T) {
+		srv, mockMCP, _ := testServerWithMCP(t)
+
+		mockMCP.AddProxyEntry(
+			"GET /api/test HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\nok",
+			"",
+		)
+
+		// List to get flow ID
+		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var listAPIResp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listAPIResp))
+		var listResp ProxyListResponse
+		require.NoError(t, json.Unmarshal(listAPIResp.Data, &listResp))
+		require.Len(t, listResp.Flows, 1)
+
+		flowID := listResp.Flows[0].FlowID
+
+		// Export the flow
+		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var exportAPIResp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &exportAPIResp))
+		var exportResp FlowExportResponse
+		require.NoError(t, json.Unmarshal(exportAPIResp.Data, &exportResp))
+
+		// Bundle ID should equal flow ID for simpler mental model
+		assert.Equal(t, flowID, exportResp.BundleID)
+		assert.Contains(t, exportResp.BundlePath, flowID)
+	})
+
+	t.Run("reexport_restores_original", func(t *testing.T) {
+		srv, mockMCP, _ := testServerWithMCP(t)
+
+		originalBody := `{"original":"content"}`
+		mockMCP.AddProxyEntry(
+			"POST /api/data HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n"+originalBody,
+			"HTTP/1.1 200 OK\r\n\r\n",
+			"",
+		)
+
+		// List to get flow ID
+		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "POST"})
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var listAPIResp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listAPIResp))
+		var listResp ProxyListResponse
+		require.NoError(t, json.Unmarshal(listAPIResp.Data, &listResp))
+		require.Len(t, listResp.Flows, 1)
+
+		flowID := listResp.Flows[0].FlowID
+
+		// First export
+		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var exportAPIResp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &exportAPIResp))
+		var exportResp FlowExportResponse
+		require.NoError(t, json.Unmarshal(exportAPIResp.Data, &exportResp))
+
+		bodyPath := filepath.Join(exportResp.BundlePath, "body")
+
+		// Verify original body
+		body, err := os.ReadFile(bodyPath)
+		require.NoError(t, err)
+		assert.Equal(t, originalBody, string(body))
+
+		// Modify the body file (simulating user edits)
+		modifiedBody := `{"modified":"by_user"}`
+		err = os.WriteFile(bodyPath, []byte(modifiedBody), 0644)
+		require.NoError(t, err)
+
+		// Verify modification took effect
+		body, err = os.ReadFile(bodyPath)
+		require.NoError(t, err)
+		assert.Equal(t, modifiedBody, string(body))
+
+		// Re-export the same flow - should restore original state
+		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// Body should be restored to original
+		body, err = os.ReadFile(bodyPath)
+		require.NoError(t, err)
+		assert.Equal(t, originalBody, string(body), "re-export should restore original body")
 	})
 }
 

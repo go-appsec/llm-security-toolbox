@@ -32,15 +32,19 @@ make lint           # Run golangci-lint and go vet
 - `sectool/service/backend.go` - HttpBackend and OastBackend interface definitions
 - `sectool/service/backend_http_burp.go` - Burp MCP implementation of HttpBackend
 - `sectool/service/backend_oast_interactsh.go` - Interactsh implementation of OastBackend
-- `sectool/service/proxy_handler.go` - Handles /proxy/summary, /proxy/list, /proxy/export
+- `sectool/service/proxy_handler.go` - Handles /proxy/summary, /proxy/list, /proxy/rule/*
 - `sectool/service/replay_handler.go` - Handles /replay/send, /replay/get
 - `sectool/service/oast_handler.go` - Handles /oast/* endpoints
+- `sectool/service/crawl_handler.go` - Handles /crawl/* endpoints
+- `sectool/service/flow_handler.go` - Handles unified /flow/get and /flow/export
+- `sectool/service/backend_crawler.go` - Colly-based crawler implementation
 - `sectool/service/mcp_server.go` - MCP SSE server exposing tools for agent integration
 - `sectool/service/httputil.go` - HTTP parsing utilities
 - `sectool/service/bundle.go` - Request bundle file operations
 - `sectool/service/mcp/burp.go` - SSE-based Burp Suite MCP client
 - `sectool/service/mcp/types.go` - MCP-specific types
 - `sectool/service/store/flow.go` - Flow ID → Burp offset mapping (thread-safe)
+- `sectool/service/store/crawl_flow.go` - Crawler flow storage (thread-safe)
 - `sectool/service/store/hash.go` - Content hashing for flow identity
 - `sectool/service/store/request.go` - Replay result storage with TTL cleanup
 - `sectool/service/ids/ids.go` - Base62 random IDs using crypto/rand
@@ -51,6 +55,8 @@ make lint           # Run golangci-lint and go vet
 - `sectool/proxy/list.go` - List command implementation
 - `sectool/proxy/export.go` - Export command implementation
 - `sectool/proxy/rule.go` - Rule CRUD command implementations
+- `sectool/crawl/flags.go` - Crawl subcommand parsing
+- `sectool/crawl/crawl.go` - Crawl command implementations
 - `sectool/replay/flags.go` - Subcommand parsing (send/get)
 - `sectool/replay/replay.go` - Command implementations
 - `sectool/oast/flags.go` - Subcommand parsing (create/poll/list/delete)
@@ -146,6 +152,14 @@ sectool proxy summary        # Aggregated traffic summary by host/path/method
 sectool proxy list          # List individual flows (requires filters)
 sectool proxy export        # Export flow to editable bundle on disk
 
+sectool crawl create        # Start new crawl session from URLs or proxy flows
+sectool crawl status        # Check crawl session progress
+sectool crawl summary       # Aggregated crawl results by host/path
+sectool crawl list          # List crawled flows, forms, or errors
+sectool crawl export        # Export crawled flow to editable bundle
+sectool crawl sessions      # List all crawl sessions
+sectool crawl stop          # Stop running crawl session
+
 sectool replay send         # Send request (from flow, bundle, or file)
 sectool replay get          # Retrieve replay result by ID
 
@@ -195,6 +209,13 @@ When running in MCP mode, the following tools are exposed:
 | `proxy_rule_add` | Add proxy match/replace rule |
 | `proxy_rule_update` | Update existing proxy rule |
 | `proxy_rule_delete` | Delete proxy rule |
+| `crawl_create` | Start crawl session from URLs or proxy flow seeds |
+| `crawl_status` | Get crawl session progress metrics |
+| `crawl_summary` | Get aggregated crawl results by host/path |
+| `crawl_list` | List crawled flows, forms, or errors |
+| `crawl_get` | Get full request/response for a crawled flow |
+| `crawl_sessions` | List all crawl sessions |
+| `crawl_stop` | Stop a running crawl session |
 | `replay_send` | Send request with modifications (headers, body, JSON fields, query params) |
 | `replay_get` | Retrieve full response from previous replay |
 | `oast_create` | Create OAST session for out-of-band testing |
@@ -216,7 +237,14 @@ All endpoints over Unix socket at `.sectool/service/socket`:
 | `POST /srv/stop` | Graceful shutdown |
 | `POST /proxy/summary` | Aggregated traffic summary |
 | `POST /proxy/list` | Query individual flows (requires filters) |
-| `POST /proxy/export` | Export flow to disk bundle |
+| `POST /crawl/create` | Start crawl session |
+| `POST /crawl/status` | Get crawl session progress |
+| `POST /crawl/summary` | Aggregated crawl results |
+| `POST /crawl/list` | List crawled flows/forms/errors |
+| `POST /crawl/sessions` | List all crawl sessions |
+| `POST /crawl/stop` | Stop crawl session |
+| `POST /flow/get` | Get flow by ID (proxy or crawler) |
+| `POST /flow/export` | Export flow to disk bundle |
 | `POST /replay/send` | Send request, returns replay_id |
 | `POST /replay/get` | Retrieve replay result by ID |
 | `POST /oast/create` | Create OAST session |

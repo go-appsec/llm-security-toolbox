@@ -87,7 +87,7 @@ func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	t.Logf("Testing with flow ID: %s", flowID)
 
 	// Export the flow
-	w = doBurpRequest(t, srv, "POST", "/proxy/export", ProxyExportRequest{FlowID: flowID})
+	w = doBurpRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -95,7 +95,7 @@ func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &exportAPIResp))
 	require.True(t, exportAPIResp.OK, "export failed: %v", exportAPIResp.Error)
 
-	var exportResp ProxyExportResponse
+	var exportResp FlowExportResponse
 	require.NoError(t, json.Unmarshal(exportAPIResp.Data, &exportResp))
 
 	t.Logf("Exported to bundle: %s at %s", exportResp.BundleID, exportResp.BundlePath)

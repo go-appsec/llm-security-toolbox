@@ -101,6 +101,7 @@ proxy list [options]
     --exclude-host <pat>    exclude matching hosts
     --exclude-path <pat>    exclude matching paths
     --limit <n>             maximum number of flows to return
+    --offset <n>            skip first N results (applied after filtering)
 
   Examples:
     sectool proxy list --host api.example.com             # flows for host
@@ -118,15 +119,19 @@ proxy export <flow_id>
   Note: Prefer 'replay send --flow' with modification flags for simple changes.
   Export is useful for complex edits (raw body, binary data, etc).
 
-  Creates bundle in .sectool/requests/<bundle_id>/:
+  The bundle_id matches the flow_id for simplicity. Re-exporting the same
+  flow overwrites the bundle, restoring it to the original captured state.
+
+  Creates bundle in .sectool/requests/<flow_id>/:
     request.http       HTTP headers with body placeholder
     body               request body (edit this for modifications)
     request.meta.json  metadata (method, URL, timestamps)
 
   Examples:
     sectool proxy list --host example.com     # find flow_id
-    sectool proxy export f7k2x                # exports to .sectool/requests/<bundle_id>/
-    sectool replay send --bundle <bundle_id>  # replay the exported bundle
+    sectool proxy export f7k2x                # exports to .sectool/requests/f7k2x/
+    sectool replay send --bundle f7k2x        # replay the exported bundle
+    sectool proxy export f7k2x                # re-export to restore original state
 
   Output: Bundle path and files created
 
@@ -241,7 +246,7 @@ func parseList(args []string) error {
 	fs := pflag.NewFlagSet("proxy list", pflag.ContinueOnError)
 	fs.SetInterspersed(true)
 	var timeout time.Duration
-	var limit int
+	var limit, offset int
 	var host, path, method, status, contains, containsBody, since, excludeHost, excludePath string
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
@@ -255,6 +260,7 @@ func parseList(args []string) error {
 	fs.StringVar(&excludeHost, "exclude-host", "", "exclude hosts matching pattern")
 	fs.StringVar(&excludePath, "exclude-path", "", "exclude paths matching pattern")
 	fs.IntVar(&limit, "limit", 0, "maximum number of flows to return")
+	fs.IntVar(&offset, "offset", 0, "skip first N results for pagination")
 	fs.IntVar(&limit, "count", 0, "alias for --limit")
 	_ = fs.MarkHidden("count")
 
@@ -290,7 +296,7 @@ Options:
 		return errors.New("at least one filter or --limit is required; use 'sectool proxy summary' first to see available traffic")
 	}
 
-	return list(timeout, host, path, method, status, contains, containsBody, since, excludeHost, excludePath, limit)
+	return list(timeout, host, path, method, status, contains, containsBody, since, excludeHost, excludePath, limit, offset)
 }
 
 func parseExport(args []string) error {
@@ -310,14 +316,17 @@ Export is useful for complex edits (raw body, binary data, etc).
 First, find the flow_id using 'sectool proxy list' with filters:
   sectool proxy list --host example.com --path /api/*
 
-Creates a request bundle in .sectool/requests/<bundle_id>/ containing:
+The bundle_id matches the flow_id for simplicity. Re-exporting the same
+flow overwrites the bundle, restoring it to the original captured state.
+
+Creates a request bundle in .sectool/requests/<flow_id>/ containing:
   request.http       HTTP headers (with body placeholder)
   body               Request body (edit directly for modifications)
   request.meta.json  Metadata (method, URL, timestamps)
 
 After replay, response files are added:
   response.http      Response headers
-  response.body     Response body
+  response.body      Response body
 
 Edit body for body modifications; Content-Length is auto-updated on replay.
 

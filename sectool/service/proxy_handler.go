@@ -8,17 +8,14 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/go-analyze/bulk"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
 	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
 )
 
@@ -56,40 +53,6 @@ func pathWithoutQuery(path string) string {
 		return path[:idx]
 	}
 	return path
-}
-
-var (
-	numericSegmentRe = regexp.MustCompile(`^\d+$`)
-	uuidSegmentRe    = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	hexIDSegmentRe   = regexp.MustCompile(`^[0-9a-fA-F]{24,}$`)
-)
-
-// normalizePath replaces dynamic path segments (numeric IDs, UUIDs, hex IDs 24+ chars)
-// with * for grouping. Query strings are preserved.
-func normalizePath(path string) string {
-	if path == "" {
-		return path
-	}
-
-	queryIdx := strings.Index(path, "?")
-	var query string
-	pathOnly := path
-	if queryIdx != -1 {
-		query = path[queryIdx:]
-		pathOnly = path[:queryIdx]
-	}
-
-	segments := strings.Split(pathOnly, "/")
-	for i, seg := range segments {
-		if seg == "" {
-			continue
-		}
-		if numericSegmentRe.MatchString(seg) || uuidSegmentRe.MatchString(seg) || hexIDSegmentRe.MatchString(seg) {
-			segments[i] = "*"
-		}
-	}
-
-	return strings.Join(segments, "/") + query
 }
 
 // matchesGlob checks if s matches a simple glob pattern.
@@ -289,8 +252,8 @@ func (s *Server) fetchAllProxyEntries(ctx context.Context) ([]flowEntry, error) 
 
 // processProxyList fetches and filters proxy history, returning individual flows.
 func (s *Server) processProxyList(ctx context.Context, req *ProxyListRequest) (*ProxyListResponse, error) {
-	log.Printf("proxy/list: fetching with filters (host=%q path=%q method=%q status=%q since=%q)",
-		req.Host, req.Path, req.Method, req.Status, req.Since)
+	log.Printf("proxy/list: fetching with filters (host=%q path=%q method=%q status=%q since=%q offset=%d)",
+		req.Host, req.Path, req.Method, req.Status, req.Since, req.Offset)
 
 	allEntries, err := s.fetchAllProxyEntries(ctx)
 	if err != nil {
@@ -300,6 +263,14 @@ func (s *Server) processProxyList(ctx context.Context, req *ProxyListRequest) (*
 	lastOffset := s.proxyLastOffset.Load()
 	filtered := applyClientFilters(allEntries, req, s.flowStore, lastOffset)
 
+	// Apply offset after filtering
+	if req.Offset > 0 && req.Offset < len(filtered) {
+		filtered = filtered[req.Offset:]
+	} else if req.Offset >= len(filtered) {
+		filtered = nil
+	}
+
+	// Apply limit after offset
 	if req.Limit > 0 && len(filtered) > req.Limit {
 		filtered = filtered[:req.Limit]
 	}
@@ -397,79 +368,6 @@ func applyClientFilters(entries []flowEntry, req *ProxyListRequest, store *store
 
 		return true
 	}, entries)
-}
-
-// handleProxyExport handles POST /proxy/export
-func (s *Server) handleProxyExport(w http.ResponseWriter, r *http.Request) {
-	var req ProxyExportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "invalid request body", err.Error())
-		return
-	} else if req.FlowID == "" {
-		s.writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "flow_id is required", "")
-		return
-	}
-
-	log.Printf("proxy/export: exporting flow %s", req.FlowID)
-
-	entry, ok := s.flowStore.Lookup(req.FlowID)
-	if !ok {
-		s.writeError(w, http.StatusNotFound, ErrCodeNotFound,
-			"flow_id not found", "run 'sectool proxy list' to see available flows")
-		return
-	}
-
-	ctx := r.Context()
-
-	proxyEntries, err := s.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
-	if err != nil {
-		if IsTimeoutError(err) {
-			s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout,
-				"request timed out fetching flow", err.Error())
-		} else {
-			s.writeError(w, http.StatusBadGateway, ErrCodeBackendError,
-				"failed to fetch flow from HttpBackend", err.Error())
-		}
-		return
-	} else if len(proxyEntries) == 0 {
-		s.writeError(w, http.StatusNotFound, ErrCodeNotFound,
-			"flow not found in proxy history", "the flow may have been cleared")
-		return
-	}
-
-	// Parse request
-	method, host, path := extractRequestMeta(proxyEntries[0].Request)
-	headers, body := splitHeadersBody([]byte(proxyEntries[0].Request))
-
-	// Generate bundle ID and path
-	bundleID := ids.Generate(ids.DefaultLength)
-	bundlePath := filepath.Join(s.paths.RequestsDir, bundleID)
-
-	// Determine scheme from host port
-	scheme, _, _ := inferSchemeAndPort(host)
-	url := scheme + "://" + host + path
-
-	meta := &bundleMeta{
-		BundleID:     bundleID,
-		SourceFlowID: req.FlowID,
-		CapturedAt:   "",
-		URL:          url,
-		Method:       method,
-		BodyIsUTF8:   utf8.Valid(body),
-		BodySize:     len(body),
-		Notes:        proxyEntries[0].Notes,
-	}
-
-	if err := writeBundle(bundlePath, headers, body, meta); err != nil {
-		s.writeError(w, http.StatusInternalServerError, ErrCodeInternal, "failed to write bundle", err.Error())
-		return
-	}
-
-	log.Printf("proxy/export: exported flow %s to bundle %s at %s", req.FlowID, bundleID, bundlePath)
-	s.writeJSON(w, http.StatusOK, ProxyExportResponse{
-		BundleID:   bundleID,
-		BundlePath: bundlePath,
-	})
 }
 
 // handleRuleList handles POST /proxy/rule/list

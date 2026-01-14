@@ -24,11 +24,11 @@ func export(timeout time.Duration, flowID string) error {
 		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
 	}
 
-	resp, err := client.ProxyExport(ctx, &service.ProxyExportRequest{
+	resp, err := client.FlowExport(ctx, &service.FlowExportRequest{
 		FlowID: flowID,
 	})
 	if err != nil {
-		return fmt.Errorf("proxy export failed: %w", err)
+		return fmt.Errorf("export failed: %w", err)
 	}
 
 	// Convert to relative path for cleaner output

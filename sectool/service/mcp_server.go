@@ -124,6 +124,16 @@ func (m *mcpServer) registerTools() {
 	m.server.AddTool(m.encodeURLTool(), m.handleEncodeURL)
 	m.server.AddTool(m.encodeBase64Tool(), m.handleEncodeBase64)
 	m.server.AddTool(m.encodeHTMLTool(), m.handleEncodeHTML)
+
+	// Crawler tools
+	m.server.AddTool(m.crawlCreateTool(), m.handleCrawlCreate)
+	m.server.AddTool(m.crawlSeedTool(), m.handleCrawlSeed)
+	m.server.AddTool(m.crawlStatusTool(), m.handleCrawlStatus)
+	m.server.AddTool(m.crawlSummaryTool(), m.handleCrawlSummary)
+	m.server.AddTool(m.crawlListTool(), m.handleCrawlList)
+	m.server.AddTool(m.crawlSessionsTool(), m.handleCrawlSessions)
+	m.server.AddTool(m.crawlStopTool(), m.handleCrawlStop)
+	m.server.AddTool(m.crawlGetTool(), m.handleCrawlGet)
 }
 
 const workflowNotInitializedError = "call workflow first with the relevant task, use 'explore' if there is no better fit"
@@ -187,6 +197,16 @@ Collaborate with the user to probe and discover security vulnerabilities.
 3. Identify interesting endpoints and potential vulnerabilities
 4. Test hypotheses using sectool (often replay_send with modifications)
 5. Report findings, discuss next steps, explore multiple angles in parallel
+
+## Optional: Expanding Coverage with Crawling
+
+Crawling can discover hidden endpoints, forms, and linked resources beyond manual exploration. Confirm with the user before starting a crawl.
+
+When approved:
+- crawl_create with seed_flows from proxy_list to inherit authentication
+- crawl_status to monitor progress; crawl_summary for aggregated results
+- crawl_list with type="forms" to find input vectors for testing
+- Crawler flows work with replay_send and crawl_get just like proxy flows with proxy_get
 `
 
 var workflowTestReportContent = `# Vulnerability Validation Workflow
@@ -240,7 +260,8 @@ At least one filter or limit is REQUIRED. Use proxy_summary first to understand 
 
 Filters: host/path/exclude_host/exclude_path use glob (*, ?). method/status are comma-separated.
 Search: contains searches URL+headers; contains_body searches bodies.
-Incremental: since=flow_id or "last" for new entries only.`),
+Incremental: since=flow_id or "last" for new entries only.
+Pagination: use limit and offset after filtering.`),
 		mcp.WithString("host", mcp.Description("Filter by host (glob pattern, e.g., '*.example.com')")),
 		mcp.WithString("path", mcp.Description("Filter by path (glob pattern, e.g., '/api/*')")),
 		mcp.WithString("method", mcp.Description("Filter by HTTP method(s), comma-separated (e.g., 'GET,POST')")),
@@ -251,6 +272,7 @@ Incremental: since=flow_id or "last" for new entries only.`),
 		mcp.WithString("exclude_host", mcp.Description("Exclude hosts matching glob pattern")),
 		mcp.WithString("exclude_path", mcp.Description("Exclude paths matching glob pattern")),
 		mcp.WithNumber("limit", mcp.Description("Max results to return")),
+		mcp.WithNumber("offset", mcp.Description("Skip first N results (applied after filtering)")),
 	)
 }
 
@@ -485,6 +507,7 @@ func (m *mcpServer) handleProxyList(ctx context.Context, req mcp.CallToolRequest
 		ExcludeHost:  req.GetString("exclude_host", ""),
 		ExcludePath:  req.GetString("exclude_path", ""),
 		Limit:        req.GetInt("limit", 0),
+		Offset:       req.GetInt("offset", 0),
 	}
 
 	if !listReq.HasFilters() {
@@ -559,6 +582,25 @@ func (m *mcpServer) handleProxyGet(ctx context.Context, req mcp.CallToolRequest)
 		RespBody:          previewBody(respBody, fullBodyMaxSize),
 		RespSize:          len(respBody),
 	})
+}
+
+// ProxyGetResponse is the response for the proxy_get MCP tool.
+// Returns full request and response data for a proxy history entry.
+type ProxyGetResponse struct {
+	FlowID            string              `json:"flow_id"`
+	Method            string              `json:"method"`
+	URL               string              `json:"url"`
+	ReqHeaders        string              `json:"request_headers"`
+	ReqHeadersParsed  map[string][]string `json:"request_headers_parsed,omitempty"`
+	ReqLine           *RequestLine        `json:"request_line,omitempty"`
+	ReqBody           string              `json:"request_body"`
+	ReqSize           int                 `json:"request_size"`
+	Status            int                 `json:"status"`
+	StatusLine        string              `json:"status_line"`
+	RespHeaders       string              `json:"response_headers"`
+	RespHeadersParsed map[string][]string `json:"response_headers_parsed,omitempty"`
+	RespBody          string              `json:"response_body"`
+	RespSize          int                 `json:"response_size"`
 }
 
 func (m *mcpServer) handleProxyRuleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -721,18 +763,22 @@ func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolReques
 		return errorResult("flow_id is required"), nil
 	}
 
-	entry, ok := m.service.flowStore.Lookup(flowID)
-	if !ok {
-		return errorResult("flow_id not found: run proxy_list to see available flows"), nil
+	// Try proxy flowStore first, then crawler backend
+	var rawRequest []byte
+	if entry, ok := m.service.flowStore.Lookup(flowID); ok {
+		proxyEntries, err := m.service.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
+		if err != nil {
+			return errorResult("failed to fetch flow: " + err.Error()), nil
+		}
+		if len(proxyEntries) == 0 {
+			return errorResult("flow not found in proxy history"), nil
+		}
+		rawRequest = []byte(proxyEntries[0].Request)
+	} else if flow, err := m.service.crawlerBackend.GetFlow(ctx, flowID); err == nil && flow != nil {
+		rawRequest = flow.Request
+	} else {
+		return errorResult("flow_id not found: run proxy_list or crawl_list to see available flows"), nil
 	}
-	proxyEntries, err := m.service.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
-	if err != nil {
-		return errorResult("failed to fetch flow: " + err.Error()), nil
-	}
-	if len(proxyEntries) == 0 {
-		return errorResult("flow not found in proxy history"), nil
-	}
-	rawRequest := []byte(proxyEntries[0].Request)
 
 	rawRequest = modifyRequestLine(rawRequest, &PathQueryOpts{
 		Path:        req.GetString("path", ""),
@@ -1171,4 +1217,497 @@ func jsonResult(data interface{}) (*mcp.CallToolResult, error) {
 
 func errorResult(message string) *mcp.CallToolResult {
 	return mcp.NewToolResultError(message)
+}
+
+// =============================================================================
+// Crawler Tools
+// =============================================================================
+
+func (m *mcpServer) crawlCreateTool() mcp.Tool {
+	return mcp.NewTool("crawl_create",
+		mcp.WithDescription(`Start a new web crawl session.
+
+Discovers URLs, forms, and content by following links from seed URLs.
+Session runs asynchronously; use crawl_status to monitor progress.
+
+Seeds can be:
+- Direct URLs (seed_urls)
+- Proxy flow IDs (seed_flows) - inherits headers from the captured request
+
+The crawler automatically:
+- Respects robots.txt (unless ignore_robots=true)
+- Extracts forms for security testing
+- Captures request/response pairs
+- Groups similar paths in summary`),
+		mcp.WithString("label", mcp.Description("Optional unique label for easy reference")),
+		mcp.WithString("seed_urls", mcp.Description("Comma-separated list of URLs to start crawling from")),
+		mcp.WithString("seed_flows", mcp.Description("Comma-separated list of proxy flow_ids to use as seeds")),
+		mcp.WithString("domains", mcp.Description("Comma-separated list of additional domains to allow")),
+		mcp.WithNumber("max_depth", mcp.Description("Maximum crawl depth (0 = unlimited)")),
+		mcp.WithNumber("max_requests", mcp.Description("Maximum total requests (0 = unlimited)")),
+		mcp.WithString("delay", mcp.Description("Delay between requests (e.g., '200ms', '1s')")),
+		mcp.WithNumber("parallelism", mcp.Description("Number of concurrent requests (default: 2)")),
+		mcp.WithBoolean("include_subdomains", mcp.Description("Include subdomains of seed hosts (default: true)")),
+		mcp.WithBoolean("submit_forms", mcp.Description("Automatically submit discovered forms (default: false)")),
+		mcp.WithBoolean("ignore_robots", mcp.Description("Ignore robots.txt restrictions (default: false)")),
+	)
+}
+
+func (m *mcpServer) handleCrawlCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	// Parse seed URLs and flows
+	var seeds []CrawlSeed
+	if seedURLs := req.GetString("seed_urls", ""); seedURLs != "" {
+		for _, u := range parseCommaSeparated(seedURLs) {
+			seeds = append(seeds, CrawlSeed{URL: u})
+		}
+	}
+	if seedFlows := req.GetString("seed_flows", ""); seedFlows != "" {
+		for _, f := range parseCommaSeparated(seedFlows) {
+			seeds = append(seeds, CrawlSeed{FlowID: f})
+		}
+	}
+
+	// Parse domains
+	var domains []string
+	if domainsStr := req.GetString("domains", ""); domainsStr != "" {
+		domains = parseCommaSeparated(domainsStr)
+	}
+
+	// Parse delay
+	var delay time.Duration
+	if delayStr := req.GetString("delay", ""); delayStr != "" {
+		parsed, err := time.ParseDuration(delayStr)
+		if err != nil {
+			return errorResult("invalid delay: " + err.Error()), nil
+		}
+		delay = parsed
+	}
+
+	includeSubdomains := true
+	if args := req.GetArguments(); args != nil {
+		if v, ok := args["include_subdomains"]; ok {
+			if b, ok := v.(bool); ok {
+				includeSubdomains = b
+			}
+		}
+	}
+
+	opts := CrawlOptions{
+		Label:             req.GetString("label", ""),
+		Seeds:             seeds,
+		ExplicitDomains:   domains,
+		IncludeSubdomains: includeSubdomains,
+		MaxDepth:          req.GetInt("max_depth", 0),
+		MaxRequests:       req.GetInt("max_requests", 0),
+		Delay:             delay,
+		Parallelism:       req.GetInt("parallelism", 0),
+		IgnoreRobotsTxt:   req.GetBool("ignore_robots", false),
+		SubmitForms:       req.GetBool("submit_forms", false),
+		// ExtractForms left nil to use config default
+	}
+
+	log.Printf("mcp/crawl_create: creating session (label=%q, seeds=%d, domains=%d)",
+		opts.Label, len(seeds), len(domains))
+
+	sess, err := m.service.crawlerBackend.CreateSession(ctx, opts)
+	if err != nil {
+		if errors.Is(err, ErrLabelExists) {
+			return errorResult("label already exists: " + err.Error()), nil
+		}
+		return errorResult("failed to create crawl session: " + err.Error()), nil
+	}
+
+	return jsonResult(CrawlCreateResponse{
+		SessionID: sess.ID,
+		Label:     sess.Label,
+		State:     sess.State,
+		CreatedAt: sess.CreatedAt.UTC().Format(time.RFC3339),
+	})
+}
+
+func (m *mcpServer) crawlSeedTool() mcp.Tool {
+	return mcp.NewTool("crawl_seed",
+		mcp.WithDescription(`Add seeds to an existing running crawl session.
+
+Can only add seeds while session is running.`),
+		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
+		mcp.WithString("seed_urls", mcp.Description("Comma-separated list of URLs to add")),
+		mcp.WithString("seed_flows", mcp.Description("Comma-separated list of proxy flow_ids to add")),
+	)
+}
+
+func (m *mcpServer) handleCrawlSeed(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	sessionID := req.GetString("session_id", "")
+	if sessionID == "" {
+		return errorResult("session_id is required"), nil
+	}
+
+	var seeds []CrawlSeed
+	if seedURLs := req.GetString("seed_urls", ""); seedURLs != "" {
+		for _, u := range parseCommaSeparated(seedURLs) {
+			seeds = append(seeds, CrawlSeed{URL: u})
+		}
+	}
+	if seedFlows := req.GetString("seed_flows", ""); seedFlows != "" {
+		for _, f := range parseCommaSeparated(seedFlows) {
+			seeds = append(seeds, CrawlSeed{FlowID: f})
+		}
+	}
+
+	if len(seeds) == 0 {
+		return errorResult("at least one seed_url or seed_flow is required"), nil
+	}
+
+	log.Printf("mcp/crawl_seed: adding %d seeds to session %s", len(seeds), sessionID)
+
+	if err := m.service.crawlerBackend.AddSeeds(ctx, sessionID, seeds); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return errorResult("session not found"), nil
+		}
+		return errorResult("failed to add seeds: " + err.Error()), nil
+	}
+
+	return jsonResult(CrawlSeedResponse{AddedCount: len(seeds)})
+}
+
+func (m *mcpServer) crawlStatusTool() mcp.Tool {
+	return mcp.NewTool("crawl_status",
+		mcp.WithDescription(`Get status of a crawl session.
+
+Returns progress metrics including URLs visited, queued, errors, and forms discovered.`),
+		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
+	)
+}
+
+func (m *mcpServer) handleCrawlStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	sessionID := req.GetString("session_id", "")
+	if sessionID == "" {
+		return errorResult("session_id is required"), nil
+	}
+
+	log.Printf("mcp/crawl_status: getting status for session %s", sessionID)
+
+	status, err := m.service.crawlerBackend.GetStatus(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return errorResult("session not found"), nil
+		}
+		return errorResult("failed to get status: " + err.Error()), nil
+	}
+
+	return jsonResult(CrawlStatusResponse{
+		State:           status.State,
+		URLsQueued:      status.URLsQueued,
+		URLsVisited:     status.URLsVisited,
+		URLsErrored:     status.URLsErrored,
+		FormsDiscovered: status.FormsDiscovered,
+		Duration:        status.Duration.Round(time.Millisecond).String(),
+		LastActivity:    status.LastActivity.UTC().Format(time.RFC3339),
+		ErrorMessage:    status.ErrorMessage,
+	})
+}
+
+func (m *mcpServer) crawlSummaryTool() mcp.Tool {
+	return mcp.NewTool("crawl_summary",
+		mcp.WithDescription(`Get aggregated summary of a crawl session.
+
+Returns traffic grouped by (host, path, method, status) - same format as proxy_summary.
+Path patterns replace numeric IDs and UUIDs with * for grouping.`),
+		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
+	)
+}
+
+func (m *mcpServer) handleCrawlSummary(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	sessionID := req.GetString("session_id", "")
+	if sessionID == "" {
+		return errorResult("session_id is required"), nil
+	}
+
+	log.Printf("mcp/crawl_summary: getting summary for session %s", sessionID)
+
+	summary, err := m.service.crawlerBackend.GetSummary(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return errorResult("session not found"), nil
+		}
+		return errorResult("failed to get summary: " + err.Error()), nil
+	}
+
+	return jsonResult(CrawlSummaryResponse{
+		SessionID:  summary.SessionID,
+		State:      summary.State,
+		Duration:   summary.Duration.Round(time.Millisecond).String(),
+		Aggregates: summary.Aggregates,
+	})
+}
+
+func (m *mcpServer) crawlListTool() mcp.Tool {
+	return mcp.NewTool("crawl_list",
+		mcp.WithDescription(`List flows, forms, or errors from a crawl session.
+
+Set type to control what is returned:
+- "urls" (default): Returns crawled flows with flow_id for use with crawl_get
+- "forms": Returns discovered forms with field information
+- "errors": Returns errors encountered during crawling
+
+Incremental: since=flow_id or "last" for new entries only.`),
+		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
+		mcp.WithString("type", mcp.Description("What to list: 'urls' (default), 'forms', or 'errors'")),
+		mcp.WithString("host", mcp.Description("Filter by host glob pattern (e.g., '*.example.com')")),
+		mcp.WithString("path", mcp.Description("Filter by path glob pattern (e.g., '/api/*')")),
+		mcp.WithString("method", mcp.Description("Filter by HTTP method (comma-separated)")),
+		mcp.WithString("status", mcp.Description("Filter by status codes (comma-separated, e.g., '200,404')")),
+		mcp.WithString("contains", mcp.Description("Search in URL and headers")),
+		mcp.WithString("contains_body", mcp.Description("Search in request/response body")),
+		mcp.WithString("exclude_host", mcp.Description("Exclude hosts matching glob pattern")),
+		mcp.WithString("exclude_path", mcp.Description("Exclude paths matching glob pattern")),
+		mcp.WithString("since", mcp.Description("Only entries after this flow_id (exclusive), or 'last' for new entries")),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of results (default: 100)")),
+		mcp.WithNumber("offset", mcp.Description("Skip first N results for pagination")),
+	)
+}
+
+func (m *mcpServer) handleCrawlList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	sessionID := req.GetString("session_id", "")
+	if sessionID == "" {
+		return errorResult("session_id is required"), nil
+	}
+
+	listType := req.GetString("type", "urls")
+	limit := req.GetInt("limit", 100)
+
+	log.Printf("mcp/crawl_list: listing %s for session %s (limit=%d)", listType, sessionID, limit)
+
+	switch listType {
+	case "forms":
+		forms, err := m.service.crawlerBackend.ListForms(ctx, sessionID, limit)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return errorResult("session not found"), nil
+			}
+			return errorResult("failed to list forms: " + err.Error()), nil
+		}
+
+		return jsonResult(CrawlListResponse{Forms: formsToAPI(forms)})
+
+	case "errors":
+		errs, err := m.service.crawlerBackend.ListErrors(ctx, sessionID, limit)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return errorResult("session not found"), nil
+			}
+			return errorResult("failed to list errors: " + err.Error()), nil
+		}
+
+		var apiErrors []CrawlErrorAPI
+		for _, e := range errs {
+			apiErrors = append(apiErrors, CrawlErrorAPI{
+				URL:    e.URL,
+				Status: e.Status,
+				Error:  e.Error,
+			})
+		}
+		return jsonResult(CrawlListResponse{Errors: apiErrors})
+
+	default: // "urls"
+		opts := CrawlListOptions{
+			Host:         req.GetString("host", ""),
+			PathPattern:  req.GetString("path", ""),
+			StatusCodes:  parseStatusCodes(req.GetString("status", "")),
+			Methods:      parseCommaSeparated(req.GetString("method", "")),
+			Contains:     req.GetString("contains", ""),
+			ContainsBody: req.GetString("contains_body", ""),
+			ExcludeHost:  req.GetString("exclude_host", ""),
+			ExcludePath:  req.GetString("exclude_path", ""),
+			Since:        req.GetString("since", ""),
+			Limit:        limit,
+			Offset:       req.GetInt("offset", 0),
+		}
+
+		flows, err := m.service.crawlerBackend.ListFlows(ctx, sessionID, opts)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return errorResult("session not found"), nil
+			}
+			return errorResult("failed to list flows: " + err.Error()), nil
+		}
+
+		var apiFlows []CrawlFlowAPI
+		for _, f := range flows {
+			apiFlows = append(apiFlows, CrawlFlowAPI{
+				FlowID:         f.ID,
+				Method:         f.Method,
+				Host:           f.Host,
+				Path:           f.Path,
+				Status:         f.StatusCode,
+				ResponseLength: f.ResponseLength,
+				Duration:       f.Duration.Round(time.Millisecond).String(),
+				FoundOn:        f.FoundOn,
+			})
+		}
+		return jsonResult(CrawlListResponse{Flows: apiFlows})
+	}
+}
+
+func (m *mcpServer) crawlSessionsTool() mcp.Tool {
+	return mcp.NewTool("crawl_sessions",
+		mcp.WithDescription(`List all crawl sessions.
+
+Returns sessions ordered by creation time (most recent first).`),
+		mcp.WithNumber("limit", mcp.Description("Maximum number of sessions to return (0 = all)")),
+	)
+}
+
+func (m *mcpServer) handleCrawlSessions(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	limit := req.GetInt("limit", 0)
+
+	log.Printf("mcp/crawl_sessions: listing sessions (limit=%d)", limit)
+
+	sessions, err := m.service.crawlerBackend.ListSessions(ctx, limit)
+	if err != nil {
+		return errorResult("failed to list sessions: " + err.Error()), nil
+	}
+
+	apiSessions := make([]CrawlSessionAPI, 0, len(sessions))
+	for _, sess := range sessions {
+		apiSessions = append(apiSessions, CrawlSessionAPI{
+			SessionID: sess.ID,
+			Label:     sess.Label,
+			State:     sess.State,
+			CreatedAt: sess.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return jsonResult(CrawlSessionsResponse{Sessions: apiSessions})
+}
+
+func (m *mcpServer) crawlStopTool() mcp.Tool {
+	return mcp.NewTool("crawl_stop",
+		mcp.WithDescription(`Stop a running crawl session.
+
+In-flight requests are abandoned immediately.`),
+		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
+	)
+}
+
+func (m *mcpServer) handleCrawlStop(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	sessionID := req.GetString("session_id", "")
+	if sessionID == "" {
+		return errorResult("session_id is required"), nil
+	}
+
+	log.Printf("mcp/crawl_stop: stopping session %s", sessionID)
+
+	if err := m.service.crawlerBackend.StopSession(ctx, sessionID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return errorResult("session not found"), nil
+		}
+		return errorResult("failed to stop session: " + err.Error()), nil
+	}
+
+	return jsonResult(CrawlStopResponse{Stopped: true})
+}
+
+func (m *mcpServer) crawlGetTool() mcp.Tool {
+	return mcp.NewTool("crawl_get",
+		mcp.WithDescription(`Get full details of a crawl flow.
+
+Returns the complete request and response for a flow captured during crawling.`),
+		mcp.WithString("flow_id", mcp.Required(), mcp.Description("The flow_id from crawl_list")),
+	)
+}
+
+func (m *mcpServer) handleCrawlGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if err := m.requireWorkflow(); err != nil {
+		return err, nil
+	}
+
+	flowID := req.GetString("flow_id", "")
+	if flowID == "" {
+		return errorResult("flow_id is required"), nil
+	}
+
+	log.Printf("mcp/crawl_get: getting flow %s", flowID)
+
+	flow, err := m.service.crawlerBackend.GetFlow(ctx, flowID)
+	if err != nil {
+		return errorResult("failed to get flow: " + err.Error()), nil
+	}
+
+	if flow == nil {
+		return errorResult("flow not found: run crawl_list to see available flows"), nil
+	}
+
+	reqHeaders, reqBody := splitHeadersBody(flow.Request)
+	respHeaders, respBody := splitHeadersBody(flow.Response)
+	statusCode, statusLine := parseResponseStatus(respHeaders)
+
+	return jsonResult(CrawlGetResponse{
+		FlowID:            flow.ID,
+		Method:            flow.Method,
+		URL:               flow.URL,
+		FoundOn:           flow.FoundOn,
+		Depth:             flow.Depth,
+		ReqHeaders:        string(reqHeaders),
+		ReqHeadersParsed:  parseHeadersToMap(string(reqHeaders)),
+		ReqBody:           previewBody(reqBody, fullBodyMaxSize),
+		ReqSize:           len(reqBody),
+		Status:            statusCode,
+		StatusLine:        statusLine,
+		RespHeaders:       string(respHeaders),
+		RespHeadersParsed: parseHeadersToMap(string(respHeaders)),
+		RespBody:          previewBody(respBody, fullBodyMaxSize),
+		RespSize:          len(respBody),
+		Truncated:         flow.Truncated,
+		Duration:          flow.Duration.Round(time.Millisecond).String(),
+	})
+}
+
+// CrawlGetResponse is the response for MCP crawl_get.
+type CrawlGetResponse struct {
+	FlowID            string              `json:"flow_id"`
+	Method            string              `json:"method"`
+	URL               string              `json:"url"`
+	FoundOn           string              `json:"found_on,omitempty"`
+	Depth             int                 `json:"depth"`
+	ReqHeaders        string              `json:"request_headers"`
+	ReqHeadersParsed  map[string][]string `json:"request_headers_parsed,omitempty"`
+	ReqBody           string              `json:"request_body"`
+	ReqSize           int                 `json:"request_size"`
+	Status            int                 `json:"status"`
+	StatusLine        string              `json:"status_line"`
+	RespHeaders       string              `json:"response_headers"`
+	RespHeadersParsed map[string][]string `json:"response_headers_parsed,omitempty"`
+	RespBody          string              `json:"response_body"`
+	RespSize          int                 `json:"response_size"`
+	Truncated         bool                `json:"truncated,omitempty"`
+	Duration          string              `json:"duration"`
 }

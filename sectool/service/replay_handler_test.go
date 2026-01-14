@@ -587,6 +587,40 @@ func TestHandleReplaySend(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.False(t, resp.OK)
 		assert.Equal(t, ErrCodeNotFound, resp.Error.Code)
+		assert.Contains(t, resp.Error.Hint, "proxy list")
+		assert.Contains(t, resp.Error.Hint, "crawl list")
+	})
+
+	t.Run("from_crawl_flow", func(t *testing.T) {
+		srv, mockMCP, _ := testServerWithMCP(t)
+
+		// Add a test flow to the crawler backend
+		crawlerBackend := srv.crawlerBackend.(*CollyBackend)
+		crawlerBackend.addTestFlow(&CrawlFlow{
+			ID:        "crawl123",
+			SessionID: "test-crawl-session",
+			URL:       "https://example.com/crawled",
+			Host:      "example.com",
+			Path:      "/crawled",
+			Method:    "GET",
+			Request:   []byte("GET /crawled HTTP/1.1\r\nHost: example.com\r\n\r\n"),
+			Response:  []byte("HTTP/1.1 200 OK\r\n\r\noriginal crawled"),
+		})
+
+		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=GET /crawled HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nreplayed crawl, messageAnnotations=Annotations{}}`)
+
+		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "crawl123"})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp APIResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.True(t, resp.OK)
+
+		var replayResp ReplaySendResponse
+		require.NoError(t, json.Unmarshal(resp.Data, &replayResp))
+		assert.NotEmpty(t, replayResp.ReplayID)
+		assert.Equal(t, 200, replayResp.Status)
 	})
 
 	t.Run("invalid_bundle_id_traversal", func(t *testing.T) {

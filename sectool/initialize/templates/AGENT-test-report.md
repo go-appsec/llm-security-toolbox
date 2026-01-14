@@ -78,8 +78,10 @@ Consider:
 ```bash
 {{.SectoolCmd}} proxy list --path "/api/resource/*"
 {{.SectoolCmd}} proxy export <flow_id>
-# Modify auth tokens or user IDs
-{{.SectoolCmd}} replay send --bundle .sectool/requests/<bundle_id>
+# Modify auth tokens or user IDs in .sectool/requests/<flow_id>/body
+{{.SectoolCmd}} replay send --bundle <flow_id>
+# Re-export to restore original state if needed
+{{.SectoolCmd}} proxy export <flow_id>
 ```
 
 ### Verifying SSRF

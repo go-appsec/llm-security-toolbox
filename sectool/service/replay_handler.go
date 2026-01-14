@@ -235,26 +235,28 @@ func (s *Server) handleReplaySend(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case req.FlowID != "":
 		inputSource = "flow:" + req.FlowID
-		// Fetch from HttpBackend via flow_id
-		entry, ok := s.flowStore.Lookup(req.FlowID)
-		if !ok {
-			s.writeError(w, http.StatusNotFound, ErrCodeNotFound,
-				"flow_id not found", "run 'sectool proxy list' to see available flows")
-			return
-		}
-		proxyEntries, err := s.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
-		if err != nil {
-			if IsTimeoutError(err) {
-				s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout, "request timed out fetching flow", err.Error())
-			} else {
-				s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "failed to fetch flow", err.Error())
+		// Try proxy flowStore first, then crawler backend
+		if entry, ok := s.flowStore.Lookup(req.FlowID); ok {
+			proxyEntries, err := s.httpBackend.GetProxyHistory(ctx, 1, entry.Offset)
+			if err != nil {
+				if IsTimeoutError(err) {
+					s.writeError(w, http.StatusGatewayTimeout, ErrCodeTimeout, "request timed out fetching flow", err.Error())
+				} else {
+					s.writeError(w, http.StatusBadGateway, ErrCodeBackendError, "failed to fetch flow", err.Error())
+				}
+				return
+			} else if len(proxyEntries) == 0 {
+				s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "flow not found in proxy history", "")
+				return
 			}
-			return
-		} else if len(proxyEntries) == 0 {
-			s.writeError(w, http.StatusNotFound, ErrCodeNotFound, "flow not found in proxy history", "")
+			rawRequest = []byte(proxyEntries[0].Request)
+		} else if flow, err := s.crawlerBackend.GetFlow(ctx, req.FlowID); err == nil && flow != nil {
+			rawRequest = flow.Request
+		} else {
+			s.writeError(w, http.StatusNotFound, ErrCodeNotFound,
+				"flow_id not found", "run 'sectool proxy list' or 'sectool crawl list' to see available flows")
 			return
 		}
-		rawRequest = []byte(proxyEntries[0].Request)
 
 	case req.BundleID != "":
 		inputSource = "bundle:" + req.BundleID

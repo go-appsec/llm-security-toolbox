@@ -46,12 +46,14 @@ type Server struct {
 	mu             sync.RWMutex
 	metricProvider map[string]HealthMetricProvider
 
-	// Backend implementations for handling proxy, sending requests, OAST, etc
-	httpBackend HttpBackend
-	oastBackend OastBackend
+	// Backend implementations for handling proxy, sending requests, OAST, crawler
+	httpBackend    HttpBackend
+	oastBackend    OastBackend
+	crawlerBackend CrawlerBackend
 
 	// Flow ID mapping (ephemeral)
-	flowStore *store.FlowStore
+	flowStore      *store.FlowStore
+	crawlFlowStore *store.CrawlFlowStore
 
 	// Request/response results store (ephemeral)
 	requestStore *store.RequestStore
@@ -81,11 +83,13 @@ func NewServer(flags DaemonFlags) (*Server, error) {
 		started:            make(chan struct{}),
 		shutdownCh:         make(chan struct{}),
 		flowStore:          store.NewFlowStore(),
+		crawlFlowStore:     store.NewCrawlFlowStore(),
 		requestStore:       store.NewRequestStore(),
 	}
 
 	// Register health metrics for store counts
 	s.RegisterHealthMetric("flows", func() string { return strconv.Itoa(s.flowStore.Count()) })
+	s.RegisterHealthMetric("crawl_flows", func() string { return strconv.Itoa(s.crawlFlowStore.Count()) })
 	s.RegisterHealthMetric("requests", func() string { return strconv.Itoa(s.requestStore.Count()) })
 
 	return s, nil
@@ -148,6 +152,8 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	// Setup OAST (nothing connected till used)
 	s.oastBackend = NewInteractshBackend()
+	// Setup Crawler backend
+	s.crawlerBackend = NewCollyBackend(s.cfg.GetCrawler(), s.crawlFlowStore, s.flowStore, s.httpBackend)
 	log.Printf("service ready, listening on %s", s.paths.SocketPath)
 
 	// Start MCP SSE server if enabled
@@ -221,6 +227,11 @@ func (s *Server) shutdown() error {
 	if s.oastBackend != nil {
 		if err := s.oastBackend.Close(); err != nil {
 			log.Printf("warning: failed to close OastBackend: %v", err)
+		}
+	}
+	if s.crawlerBackend != nil {
+		if err := s.crawlerBackend.Close(); err != nil {
+			log.Printf("warning: failed to close CrawlerBackend: %v", err)
 		}
 	}
 
@@ -318,7 +329,6 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("POST /proxy/summary", s.handleProxySummary)
 	mux.HandleFunc("POST /proxy/list", s.handleProxyList)
-	mux.HandleFunc("POST /proxy/export", s.handleProxyExport)
 
 	mux.HandleFunc("POST /replay/send", s.handleReplaySend)
 	mux.HandleFunc("POST /replay/get", s.handleReplayGet)
@@ -334,6 +344,17 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /proxy/rule/add", s.handleRuleAdd)
 	mux.HandleFunc("POST /proxy/rule/update", s.handleRuleUpdate)
 	mux.HandleFunc("POST /proxy/rule/delete", s.handleRuleDelete)
+
+	mux.HandleFunc("POST /crawl/create", s.handleCrawlCreate)
+	mux.HandleFunc("POST /crawl/seed", s.handleCrawlSeed)
+	mux.HandleFunc("POST /crawl/status", s.handleCrawlStatus)
+	mux.HandleFunc("POST /crawl/summary", s.handleCrawlSummary)
+	mux.HandleFunc("POST /crawl/list", s.handleCrawlList)
+	mux.HandleFunc("POST /crawl/sessions", s.handleCrawlSessions)
+	mux.HandleFunc("POST /crawl/stop", s.handleCrawlStop)
+
+	mux.HandleFunc("POST /flow/get", s.handleFlowGet)
+	mux.HandleFunc("POST /flow/export", s.handleFlowExport)
 
 	return mux
 }

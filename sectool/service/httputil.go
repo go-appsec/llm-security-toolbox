@@ -6,15 +6,51 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 )
+
+var (
+	numericSegmentRe = regexp.MustCompile(`^\d+$`)
+	uuidSegmentRe    = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	hexIDSegmentRe   = regexp.MustCompile(`^[0-9a-fA-F]{24,}$`)
+)
+
+// normalizePath replaces dynamic path segments (numeric IDs, UUIDs, hex IDs 24+ chars)
+// with * for grouping. Query strings are preserved.
+func normalizePath(path string) string {
+	if path == "" {
+		return path
+	}
+
+	queryIdx := strings.Index(path, "?")
+	var query string
+	pathOnly := path
+	if queryIdx != -1 {
+		query = path[queryIdx:]
+		pathOnly = path[:queryIdx]
+	}
+
+	segments := strings.Split(pathOnly, "/")
+	for i, seg := range segments {
+		if seg == "" {
+			continue
+		}
+		if numericSegmentRe.MatchString(seg) || uuidSegmentRe.MatchString(seg) || hexIDSegmentRe.MatchString(seg) {
+			segments[i] = "*"
+		}
+	}
+
+	return strings.Join(segments, "/") + query
+}
 
 const (
 	schemeHTTP  = "http"
 	schemeHTTPS = "https"
-	userAgent   = "go-harden/llm-security-toolbox - sectool"
 )
 
 // extractRequestMeta extracts method, host, path from raw HTTP request.
@@ -338,7 +374,7 @@ func buildRawRequest(method string, parsedURL *url.URL, headers map[string]strin
 		return nil
 	}
 	req.ContentLength = int64(len(body))
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", config.UserAgent())
 
 	// Apply user headers (may override Host or User-Agent)
 	for name, value := range headers {

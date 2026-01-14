@@ -148,3 +148,179 @@ type OastPollResultInfo struct {
 	Events       []OastEventInfo // Events matching the filter
 	DroppedCount int             // Number of events dropped due to buffer limit
 }
+
+// CrawlerBackend defines the interface for web crawling operations.
+type CrawlerBackend interface {
+	// CreateSession starts a new crawl session. Returns immediately; crawling is async.
+	// Returns error if max concurrent sessions reached or no valid seeds/domains.
+	CreateSession(ctx context.Context, opts CrawlOptions) (*CrawlSessionInfo, error)
+
+	// AddSeeds adds URLs to an existing session (can be called while running).
+	// sessionID can be the ID or label. Returns error if session is not running.
+	AddSeeds(ctx context.Context, sessionID string, seeds []CrawlSeed) error
+
+	// GetStatus returns session progress metrics.
+	// sessionID can be the ID or label. Returns ErrNotFound if session doesn't exist.
+	GetStatus(ctx context.Context, sessionID string) (*CrawlStatus, error)
+
+	// GetSummary returns aggregated results grouped by path pattern.
+	// sessionID can be the ID or label.
+	GetSummary(ctx context.Context, sessionID string) (*CrawlSummary, error)
+
+	// ListFlows returns flows matching filters.
+	// sessionID can be the ID or label.
+	ListFlows(ctx context.Context, sessionID string, opts CrawlListOptions) ([]CrawlFlow, error)
+
+	// ListForms returns forms discovered in a session.
+	// sessionID can be the ID or label.
+	ListForms(ctx context.Context, sessionID string, limit int) ([]DiscoveredForm, error)
+
+	// ListErrors returns errors encountered in a session.
+	// sessionID can be the ID or label.
+	ListErrors(ctx context.Context, sessionID string, limit int) ([]CrawlError, error)
+
+	// GetFlow returns a flow by ID. Returns ErrNotFound if flow doesn't exist.
+	// Searches CrawlFlowStore (not session-scoped).
+	GetFlow(ctx context.Context, flowID string) (*CrawlFlow, error)
+
+	// ExportFlow exports a flow to a bundle on disk.
+	// Returns ExportResult with bundle path and files created.
+	ExportFlow(ctx context.Context, flowID string, bundleDir string) (*ExportResult, error)
+
+	// StopSession immediately stops a running crawl. In-flight requests are abandoned.
+	// sessionID can be the ID or label.
+	StopSession(ctx context.Context, sessionID string) error
+
+	// ListSessions returns all sessions (active and completed), most recent first.
+	// limit=0 means no limit.
+	ListSessions(ctx context.Context, limit int) ([]CrawlSessionInfo, error)
+
+	// Close cleans up all sessions (called on service shutdown).
+	Close() error
+}
+
+// CrawlOptions contains parameters for creating a crawl session.
+type CrawlOptions struct {
+	Label             string            // Optional unique label for the session
+	Seeds             []CrawlSeed       // Initial seeds (URLs and/or flow IDs)
+	ExplicitDomains   []string          // User-specified via --domain
+	AllowedPaths      []string          // Glob patterns (default: all)
+	DisallowedPaths   []string          // Glob patterns (default from config)
+	IncludeSubdomains bool              // Default: true
+	MaxDepth          int               // 0 = unlimited
+	MaxRequests       int               // 0 = unlimited
+	Delay             time.Duration     // Default: 200ms
+	RandomDelay       time.Duration     // Additional random jitter
+	Parallelism       int               // Default: 2
+	IgnoreRobotsTxt   bool              // Default: false
+	SubmitForms       bool              // Default: false
+	ExtractForms      *bool             // Default: true (from config)
+	Headers           map[string]string // Custom headers
+}
+
+// CrawlSeed represents a seed for starting a crawl.
+type CrawlSeed struct {
+	URL    string // Direct URL seed
+	FlowID string // Or proxy flow ID - extracts URL and ALL headers
+}
+
+// CrawlListOptions contains filters for listing crawl flows.
+// Mirrors ProxyListRequest filters for consistency.
+type CrawlListOptions struct {
+	Host         string   // Glob pattern for host
+	PathPattern  string   // Glob pattern for path
+	StatusCodes  []int    // Filter by status codes
+	Methods      []string // Filter by HTTP methods
+	Contains     string   // Search URL and headers
+	ContainsBody string   // Search request/response body
+	ExcludeHost  string   // Exclude hosts matching glob
+	ExcludePath  string   // Exclude paths matching glob
+	Since        string   // Only flows after this flow_id, or "last" for new flows
+	Limit        int      // Max results (0 = no limit)
+	Offset       int      // Skip first N results
+}
+
+// CrawlSessionInfo represents metadata about a crawl session.
+type CrawlSessionInfo struct {
+	ID        string    // Short sectool ID
+	Label     string    // Optional user-provided label
+	CreatedAt time.Time // When the session was created
+	State     string    // "running", "stopped", "completed", "error"
+}
+
+// CrawlStatus contains progress metrics for a crawl session.
+type CrawlStatus struct {
+	State           string        // "running", "stopped", "completed", "error"
+	URLsQueued      int           // URLs waiting to be visited
+	URLsVisited     int           // URLs successfully visited
+	URLsErrored     int           // URLs that resulted in errors
+	FormsDiscovered int           // Forms found during crawl
+	Duration        time.Duration // Time since session started
+	LastActivity    time.Time     // When last request was made
+	ErrorMessage    string        // Error details if State is "error"
+}
+
+// CrawlSummary contains aggregated crawl results.
+// Uses same AggregateEntry format as proxy for consistency.
+type CrawlSummary struct {
+	SessionID  string           // Session identifier
+	State      string           // Current session state
+	Duration   time.Duration    // Total crawl duration
+	Aggregates []AggregateEntry // Traffic grouped by (host, path, method, status)
+}
+
+// CrawlFlow represents a single captured request/response from crawling.
+type CrawlFlow struct {
+	ID             string        // Short sectool ID
+	SessionID      string        // Parent session ID
+	URL            string        // Full URL visited
+	Host           string        // Hostname (extracted from URL)
+	Path           string        // Path with query string (extracted from URL)
+	Method         string        // HTTP method
+	FoundOn        string        // Parent URL where discovered
+	Depth          int           // Crawl depth from seed
+	StatusCode     int           // HTTP response status
+	ContentType    string        // Response content type
+	ResponseLength int           // Response body length in bytes
+	Request        []byte        // Wire-format bytes from httputil.DumpRequestOut
+	Response       []byte        // Wire-format bytes from httputil.DumpResponse
+	Truncated      bool          // True if response exceeded max_response_body_bytes
+	Duration       time.Duration // Request/response round-trip time
+	DiscoveredAt   time.Time     // When this flow was captured
+}
+
+// DiscoveredForm represents a form found during crawling.
+type DiscoveredForm struct {
+	ID        string      // Short sectool ID
+	SessionID string      // Parent session ID
+	URL       string      // Page containing the form
+	Action    string      // Form action URL (resolved to absolute)
+	Method    string      // GET/POST
+	Inputs    []FormInput // Form fields
+	HasCSRF   bool        // Detected CSRF token field
+}
+
+// FormInput represents a single form field.
+type FormInput struct {
+	Name     string // Field name attribute
+	Type     string // text, password, hidden, select, textarea, etc.
+	Value    string // Default/current value
+	Required bool   // Has required attribute
+}
+
+// CrawlError represents an error encountered during crawling.
+type CrawlError struct {
+	FlowID string // May be empty if request never sent
+	URL    string // URL that caused the error
+	Error  string // Error message
+	Status int    // HTTP status if available
+}
+
+// ExportResult contains information about an exported flow bundle.
+// BundleID equals FlowID for simpler mental model - one ID per request.
+// Re-exporting the same flow overwrites the bundle, restoring original state.
+type ExportResult struct {
+	BundleID   string   // Bundle identifier (equals flow_id)
+	BundlePath string   // Full path to bundle directory
+	Files      []string // List of created files
+}

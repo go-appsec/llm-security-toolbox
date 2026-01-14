@@ -10,6 +10,7 @@ import (
 
 	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
 	"github.com/jentfoo/llm-security-toolbox/sectool/config"
+	"github.com/jentfoo/llm-security-toolbox/sectool/crawl"
 	"github.com/jentfoo/llm-security-toolbox/sectool/encode"
 	"github.com/jentfoo/llm-security-toolbox/sectool/initialize"
 	"github.com/jentfoo/llm-security-toolbox/sectool/oast"
@@ -63,6 +64,8 @@ func runClientCLI(args []string) int {
 		err = replay.Parse(args[1:])
 	case "oast":
 		err = oast.Parse(args[1:])
+	case "crawl":
+		err = crawl.Parse(args[1:])
 	case "encode":
 		err = encode.Parse(args[1:])
 	case "version", "--version", "-v":
@@ -72,7 +75,7 @@ func runClientCLI(args []string) int {
 		printRootUsage()
 		return 0
 	default:
-		validCommands := []string{"init", "service", "proxy", "replay", "oast", "encode", "version", "help"}
+		validCommands := []string{"init", "service", "proxy", "replay", "oast", "crawl", "encode", "version", "help"}
 		err = cli.UnknownCommandError(args[0], validCommands)
 	}
 
@@ -94,6 +97,7 @@ Commands:
   proxy      Query and manage proxy history
   replay     Replay HTTP requests (with modifications)
   oast       Manage OAST domains for out-of-band testing
+  crawl      Web crawler for URL and form discovery
   encode     Encoding/decoding utilities (url, base64, html)
   service    Manage background service (user only, auto-starts as needed)
 

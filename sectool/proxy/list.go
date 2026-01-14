@@ -46,7 +46,7 @@ func summary(timeout time.Duration, host, path, method, status, contains, contai
 	return nil
 }
 
-func list(timeout time.Duration, host, path, method, status, contains, containsBody, since, excludeHost, excludePath string, limit int) error {
+func list(timeout time.Duration, host, path, method, status, contains, containsBody, since, excludeHost, excludePath string, limit, offset int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -71,6 +71,7 @@ func list(timeout time.Duration, host, path, method, status, contains, containsB
 		ExcludeHost:  excludeHost,
 		ExcludePath:  excludePath,
 		Limit:        limit,
+		Offset:       offset,
 	})
 	if err != nil {
 		return fmt.Errorf("proxy list failed: %w", err)

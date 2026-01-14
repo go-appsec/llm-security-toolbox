@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/jentfoo/llm-security-toolbox/sectool/config"
 )
 
 func TestExtractRequestMeta(t *testing.T) {
@@ -755,6 +757,35 @@ func TestTargetFromURL(t *testing.T) {
 	}
 }
 
+func TestNormalizePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"no_change", "/api/users", "/api/users"},
+		{"numeric", "/api/users/123", "/api/users/*"},
+		{"multiple_numeric", "/api/users/123/posts/456", "/api/users/*/posts/*"},
+		{"uuid", "/api/users/550e8400-e29b-41d4-a716-446655440000", "/api/users/*"},
+		{"uuid_no_dashes", "/api/users/550e8400e29b41d4a716446655440000", "/api/users/*"},
+		{"mongodb_objectid", "/api/users/507f1f77bcf86cd799439011", "/api/users/*"},
+		{"preserve_query", "/api/users/123?foo=bar", "/api/users/*?foo=bar"},
+		{"root", "/", "/"},
+		{"empty", "", ""},
+		{"trailing_slash", "/api/users/123/", "/api/users/*/"},
+		{"mixed", "/v2/orders/42/items/abc123def456789012345678", "/v2/orders/*/items/*"},
+		{"short_hex_unchanged", "/api/abc123", "/api/abc123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizePath(tt.path))
+		})
+	}
+}
+
 func TestBuildRawRequest(t *testing.T) {
 	t.Parallel()
 
@@ -775,7 +806,7 @@ func TestBuildRawRequest(t *testing.T) {
 			wantContains: []string{
 				"GET /api/users HTTP/1.1\r\n",
 				"Host: example.com\r\n",
-				"User-Agent: " + userAgent + "\r\n",
+				"User-Agent: " + config.UserAgent() + "\r\n",
 			},
 		},
 		{

@@ -192,6 +192,7 @@ type ProxyListRequest struct {
 	ExcludeHost  string `json:"exclude_host,omitempty"`
 	ExcludePath  string `json:"exclude_path,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
+	Offset       int    `json:"offset,omitempty"`
 }
 
 // HasFilters returns true if any filter is set.
@@ -231,36 +232,6 @@ type FlowSummary struct {
 	Path           string `json:"path"`
 	Status         int    `json:"status"`
 	ResponseLength int    `json:"response_length"`
-}
-
-// ProxyExportRequest is the request for POST /proxy/export.
-type ProxyExportRequest struct {
-	FlowID string `json:"flow_id"`
-}
-
-// ProxyExportResponse is the response for POST /proxy/export.
-type ProxyExportResponse struct {
-	BundleID   string `json:"bundle_id"`
-	BundlePath string `json:"bundle_path"`
-}
-
-// ProxyGetResponse is the response for the proxy_get MCP tool.
-// Returns full request and response data for a proxy history entry.
-type ProxyGetResponse struct {
-	FlowID            string              `json:"flow_id"`
-	Method            string              `json:"method"`
-	URL               string              `json:"url"`
-	ReqHeaders        string              `json:"request_headers"`
-	ReqHeadersParsed  map[string][]string `json:"request_headers_parsed,omitempty"`
-	ReqLine           *RequestLine        `json:"request_line,omitempty"`
-	ReqBody           string              `json:"request_body"`
-	ReqSize           int                 `json:"request_size"`
-	Status            int                 `json:"status"`
-	StatusLine        string              `json:"status_line"`
-	RespHeaders       string              `json:"response_headers"`
-	RespHeadersParsed map[string][]string `json:"response_headers_parsed,omitempty"`
-	RespBody          string              `json:"response_body"`
-	RespSize          int                 `json:"response_size"`
 }
 
 // RequestLine contains path and version from the HTTP request line.

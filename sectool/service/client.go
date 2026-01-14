@@ -309,15 +309,6 @@ func (c *Client) ProxyList(ctx context.Context, req *ProxyListRequest) (*ProxyLi
 	return &resp, nil
 }
 
-// ProxyExport exports a flow to disk for editing.
-func (c *Client) ProxyExport(ctx context.Context, req *ProxyExportRequest) (*ProxyExportResponse, error) {
-	var resp ProxyExportResponse
-	if err := c.doJSONRequest(ctx, "/proxy/export", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
 // =============================================================================
 // Replay API
 // =============================================================================
@@ -433,6 +424,91 @@ func (c *Client) RuleUpdate(ctx context.Context, req *RuleUpdateRequest) (*RuleE
 func (c *Client) RuleDelete(ctx context.Context, req *RuleDeleteRequest) (*RuleDeleteResponse, error) {
 	var resp RuleDeleteResponse
 	if err := c.doJSONRequest(ctx, "/proxy/rule/delete", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// =============================================================================
+// Crawl API
+// =============================================================================
+
+// CrawlCreate creates a new crawl session.
+func (c *Client) CrawlCreate(ctx context.Context, req *CrawlCreateRequest) (*CrawlCreateResponse, error) {
+	var resp CrawlCreateResponse
+	if err := c.doJSONRequest(ctx, "/crawl/create", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlSeed adds seeds to an existing crawl session.
+func (c *Client) CrawlSeed(ctx context.Context, req *CrawlSeedRequest) (*CrawlSeedResponse, error) {
+	var resp CrawlSeedResponse
+	if err := c.doJSONRequest(ctx, "/crawl/seed", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlStatus gets the status of a crawl session.
+func (c *Client) CrawlStatus(ctx context.Context, req *CrawlStatusRequest) (*CrawlStatusResponse, error) {
+	var resp CrawlStatusResponse
+	if err := c.doJSONRequest(ctx, "/crawl/status", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlSummary gets aggregated summary of a crawl session.
+func (c *Client) CrawlSummary(ctx context.Context, req *CrawlSummaryRequest) (*CrawlSummaryResponse, error) {
+	var resp CrawlSummaryResponse
+	if err := c.doJSONRequest(ctx, "/crawl/summary", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlList lists flows from a crawl session.
+func (c *Client) CrawlList(ctx context.Context, req *CrawlListRequest) (*CrawlListResponse, error) {
+	var resp CrawlListResponse
+	if err := c.doJSONRequest(ctx, "/crawl/list", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlSessions lists all crawl sessions.
+func (c *Client) CrawlSessions(ctx context.Context, req *CrawlSessionsRequest) (*CrawlSessionsResponse, error) {
+	var resp CrawlSessionsResponse
+	if err := c.doJSONRequest(ctx, "/crawl/sessions", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CrawlStop stops a running crawl session.
+func (c *Client) CrawlStop(ctx context.Context, req *CrawlStopRequest) (*CrawlStopResponse, error) {
+	var resp CrawlStopResponse
+	if err := c.doJSONRequest(ctx, "/crawl/stop", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// FlowGet gets full details of any flow (proxy or crawler).
+func (c *Client) FlowGet(ctx context.Context, req *FlowGetRequest) (*FlowGetResponse, error) {
+	var resp FlowGetResponse
+	if err := c.doJSONRequest(ctx, "/flow/get", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// FlowExport exports any flow (proxy or crawler) to an editable bundle on disk.
+func (c *Client) FlowExport(ctx context.Context, req *FlowExportRequest) (*FlowExportResponse, error) {
+	var resp FlowExportResponse
+	if err := c.doJSONRequest(ctx, "/flow/export", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
