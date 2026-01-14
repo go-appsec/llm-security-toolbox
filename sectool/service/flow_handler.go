@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/ids"
 )
 
 // FlowGetRequest is the request for POST /flow/get.

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func send(timeout time.Duration, flow, bundle, file, body, target string, headers, removeHeaders []string,

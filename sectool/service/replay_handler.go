@@ -17,9 +17,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/ids"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/store"
 )
 
 // updateContentLength updates or adds Content-Length header.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func create(timeout time.Duration, label string) error {

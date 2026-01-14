@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
 )
 
 func TestExtractRequestMeta(t *testing.T) {

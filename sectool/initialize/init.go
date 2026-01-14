@@ -13,8 +13,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 //go:embed templates/AGENT-explore.md

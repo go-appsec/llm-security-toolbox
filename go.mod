@@ -1,4 +1,4 @@
-module github.com/jentfoo/llm-security-toolbox
+module github.com/go-harden/llm-security-toolbox
 
 go 1.24.0
 

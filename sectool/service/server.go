@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/store"
 )
 
 const shutdownTimeout = 10 * time.Second

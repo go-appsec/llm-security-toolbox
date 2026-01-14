@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func ruleList(timeout time.Duration, websocket bool, limit int) error {

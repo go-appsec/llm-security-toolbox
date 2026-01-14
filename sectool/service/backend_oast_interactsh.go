@@ -12,7 +12,7 @@ import (
 	"github.com/go-analyze/bulk"
 	"github.com/go-harden/interactsh-lite/pkg/oobclient"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/ids"
 )
 
 const (

@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/cli"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
 )
 
 const DefaultMCPPort = 9119

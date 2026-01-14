@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/config"
+	"github.com/go-harden/llm-security-toolbox/sectool/config"
 )
 
 var (

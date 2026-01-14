@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-analyze/bulk"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/store"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/store"
 )
 
 const (

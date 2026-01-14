@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/cli"
+	"github.com/go-harden/llm-security-toolbox/sectool/cli"
 )
 
 var initModes = []string{"test-report", "explore", "help"}

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/mcp"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/ids"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/mcp"
 )
 
 // BurpBackend implements HttpBackend using Burp Suite via MCP.

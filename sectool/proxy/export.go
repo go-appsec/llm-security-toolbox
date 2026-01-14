@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func export(timeout time.Duration, flowID string) error {

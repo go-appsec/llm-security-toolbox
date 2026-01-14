@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func create(timeout time.Duration, urls, flows, domains, headers []string, label string, maxDepth, maxRequests int, delay time.Duration, parallelism int, includeSubdomains, submitForms, ignoreRobots bool) error {

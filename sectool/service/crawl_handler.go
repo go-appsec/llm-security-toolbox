@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service/ids"
+	"github.com/go-harden/llm-security-toolbox/sectool/service/ids"
 )
 
 // =============================================================================

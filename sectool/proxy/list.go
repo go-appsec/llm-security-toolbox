@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jentfoo/llm-security-toolbox/sectool/service"
+	"github.com/go-harden/llm-security-toolbox/sectool/service"
 )
 
 func summary(timeout time.Duration, host, path, method, status, contains, containsBody, excludeHost, excludePath string) error {
