@@ -106,7 +106,7 @@ const (
 )
 
 // IsTimeoutError returns true if the error is a timeout (context deadline exceeded,
-// network timeout, etc). Used to distinguish timeout errors from other backend errors.
+// network timeout, etc.). Used to distinguish timeout errors from other backend errors.
 func IsTimeoutError(err error) bool {
 	if err == nil {
 		return false

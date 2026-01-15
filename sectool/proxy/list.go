@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-harden/llm-security-toolbox/sectool/service"
@@ -13,14 +12,9 @@ func summary(timeout time.Duration, host, path, method, status, contains, contai
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.ProxySummary(ctx, &service.ProxyListRequest{
@@ -50,14 +44,9 @@ func list(timeout time.Duration, host, path, method, status, contains, containsB
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.ProxyList(ctx, &service.ProxyListRequest{
@@ -87,7 +76,6 @@ func list(timeout time.Duration, host, path, method, status, contains, containsB
 }
 
 func printAggregateTable(agg []service.AggregateEntry) {
-	// Print markdown table
 	fmt.Println("| host | path | method | status | count |")
 	fmt.Println("|------|------|--------|--------|-------|")
 	for _, e := range agg {
@@ -103,7 +91,6 @@ func printAggregateTable(agg []service.AggregateEntry) {
 }
 
 func printFlowTable(flows []service.FlowSummary) {
-	// Print markdown table
 	fmt.Println("| flow_id | method | host | path | status | size |")
 	fmt.Println("|---------|--------|------|------|--------|------|")
 	for _, f := range flows {

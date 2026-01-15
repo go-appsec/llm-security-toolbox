@@ -1,6 +1,9 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,6 +13,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func doTestRequest(t *testing.T, srv *Server, method, path string, body interface{}) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var reqBody bytes.Buffer
+	if body != nil {
+		err := json.NewEncoder(&reqBody).Encode(body)
+		require.NoError(t, err)
+	}
+
+	req := httptest.NewRequest(method, path, &reqBody)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	srv.routes().ServeHTTP(w, req)
+	return w
+}
 
 func TestNewServer(t *testing.T) {
 	t.Parallel()

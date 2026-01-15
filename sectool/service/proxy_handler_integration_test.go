@@ -19,7 +19,7 @@ func TestBurp_ProxySummary(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	// Query proxy summary (may be empty or have entries depending on Burp state)
-	w := doBurpRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
+	w := doTestRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -38,7 +38,7 @@ func TestBurp_ProxyListWithFilters(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	// Query with method filter
-	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
+	w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
 		Method: "GET,POST",
 	})
 
@@ -66,7 +66,7 @@ func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	// First get a flow ID from proxy list
-	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
+	w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
 		Method: "GET", // Filter to get flows
 	})
 
@@ -87,7 +87,7 @@ func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	t.Logf("Testing with flow ID: %s", flowID)
 
 	// Export the flow
-	w = doBurpRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+	w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -111,7 +111,7 @@ func TestBurp_ProxyExportAndReplay(t *testing.T) {
 	t.Logf("Exported request:\n%s", string(reqContent))
 
 	// Replay the request from the bundle using bundle ID
-	w = doBurpRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
+	w = doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
 		BundleID: exportResp.BundleID,
 	})
 

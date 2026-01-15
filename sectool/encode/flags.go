@@ -36,7 +36,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool encode <type> [options] <string | -f PATH>
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool encode <type> [options] <string | -f PATH>
 
 Encoding/decoding utilities for security testing payloads.
 Runs locally, no service required.
@@ -95,7 +95,7 @@ func parseAndRun(name string, args []string, fn func(string, bool) (string, erro
 	fs.BoolVar(&raw, "raw", false, "output without trailing newline")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: sectool encode %s [options] <string>\n\nOptions:\n", name)
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: sectool encode %s [options] <string>\n\nOptions:\n", name)
 		fs.PrintDefaults()
 	}
 

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -22,8 +21,6 @@ import (
 const (
 	// fetchBatchSize is the number of entries to fetch per MCP call
 	fetchBatchSize = 500
-	// maxPathLength is the maximum path length for display (truncated beyond this)
-	maxPathLength = 100
 	// responsePreviewSize is the maximum bytes to show in response preview
 	responsePreviewSize = 500
 	// fullBodyMaxSize is the maximum bytes to return in full body responses
@@ -37,14 +34,6 @@ func globToRegex(glob string) string {
 	escaped = strings.ReplaceAll(escaped, `\*`, ".*")
 	escaped = strings.ReplaceAll(escaped, `\?`, ".")
 	return escaped
-}
-
-// truncatePath truncates path to maxLen characters.
-func truncatePath(path string, maxLen int) string {
-	if len(path) <= maxLen || maxLen < 1 {
-		return path
-	}
-	return path[:maxLen-3] + "..."
 }
 
 // pathWithoutQuery returns the path portion before any query string.
@@ -94,43 +83,6 @@ func parseStatusCodes(s string) []int {
 			result = append(result, code)
 		}
 	}
-	return result
-}
-
-// aggregateByTuple groups entries by (host, path, method, status).
-func aggregateByTuple(entries []flowEntry) []AggregateEntry {
-	type aggregateKey struct {
-		Host   string
-		Path   string
-		Method string
-		Status int
-	}
-	counts := make(map[aggregateKey]int)
-	for _, e := range entries {
-		key := aggregateKey{
-			Host:   e.host,
-			Path:   normalizePath(e.path),
-			Method: e.method,
-			Status: e.status,
-		}
-		counts[key]++
-	}
-
-	// Convert to slice and sort by count descending
-	result := make([]AggregateEntry, 0, len(counts))
-	for key, count := range counts {
-		result = append(result, AggregateEntry{
-			Host:   key.Host,
-			Path:   truncatePath(key.Path, maxPathLength),
-			Method: key.Method,
-			Status: key.Status,
-			Count:  count,
-		})
-	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Count > result[j].Count
-	})
-
 	return result
 }
 
@@ -206,7 +158,9 @@ func (s *Server) processProxySummary(ctx context.Context, req *ProxyListRequest)
 
 	filtered := applyClientFilters(allEntries, req, s.flowStore, s.proxyLastOffset.Load())
 
-	agg := aggregateByTuple(filtered)
+	agg := aggregateByTuple(filtered, func(e flowEntry) (string, string, string, int) {
+		return e.host, e.path, e.method, e.status
+	})
 	log.Printf("proxy/summary: returning %d aggregates from %d entries", len(agg), len(filtered))
 
 	return &ProxySummaryResponse{Aggregates: agg}, nil
@@ -297,7 +251,7 @@ func (s *Server) processProxyList(ctx context.Context, req *ProxyListRequest) (*
 			Scheme:         scheme,
 			Host:           entry.host,
 			Port:           port,
-			Path:           truncatePath(entry.path, maxPathLength),
+			Path:           truncateString(entry.path, maxPathLength),
 			Status:         entry.status,
 			ResponseLength: entry.respLen,
 		})

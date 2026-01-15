@@ -45,7 +45,7 @@ func (b *CollyBackend) addTestFlow(flow *CrawlFlow) {
 	b.flowStore.Register(flow.ID, sessionID)
 }
 
-func TestIsAllowedContentType(t *testing.T) {
+func TestIsTextContentType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -73,7 +73,7 @@ func TestIsAllowedContentType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isAllowedContentType(tt.contentType))
+			assert.Equal(t, tt.want, isTextContentType(tt.contentType))
 		})
 	}
 }
@@ -157,31 +157,6 @@ func TestGlobsToRegexes(t *testing.T) {
 		regexes = globsToRegexes([]string{})
 		assert.Empty(t, regexes)
 	})
-}
-
-func TestMatchesAnyRegex(t *testing.T) {
-	t.Parallel()
-
-	patterns := []string{"*logout*", "*signout*", "*delete*"}
-	regexes := globsToRegexes(patterns)
-
-	tests := []struct {
-		name string
-		url  string
-		want bool
-	}{
-		{"logout_match", "https://example.com/user/logout", true},
-		{"signout_match", "https://example.com/auth/signout", true},
-		{"delete_match", "https://example.com/api/users/delete", true},
-		{"safe_url", "https://example.com/api/users/123", false},
-		{"login_ok", "https://example.com/login", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, matchesAnyRegex(tt.url, regexes))
-		})
-	}
 }
 
 func TestBuildDomainFilters(t *testing.T) {

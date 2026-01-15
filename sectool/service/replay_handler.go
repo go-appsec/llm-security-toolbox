@@ -180,7 +180,7 @@ func validateRequest(raw []byte) []validationIssue {
 	return issues
 }
 
-// formatIssues formats validation issues as markdown.
+// formatIssues formats validation issues as Markdown.
 func formatIssues(issues []validationIssue) string {
 	var sb strings.Builder
 	sb.WriteString("| Issue | Severity | Detail |\n")

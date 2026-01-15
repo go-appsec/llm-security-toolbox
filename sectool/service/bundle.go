@@ -15,7 +15,7 @@ const bodyPlaceholder = "[[SECTOOL_BODY_FILE: body]]"
 // bundleMeta contains metadata for a request bundle.
 type bundleMeta struct {
 	BundleID     string `json:"bundle_id"`
-	SourceFlowID string `json:"source_flow_id,omitempty"`
+	SourceFlowID string `json:"source_flow_id"`
 	CapturedAt   string `json:"captured_at"`
 	URL          string `json:"url"`
 	Method       string `json:"method"`

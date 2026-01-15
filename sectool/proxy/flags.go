@@ -39,7 +39,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool proxy <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy <command> [options]
 
 Query and manage proxy history from Burp Suite.
 
@@ -220,7 +220,7 @@ func parseSummary(args []string) error {
 	fs.StringVar(&excludePath, "exclude-path", "", "exclude paths matching pattern")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy summary [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy summary [options]
 
 Get aggregated summary of proxy history grouped by host/path/method/status.
 Use this first to understand available traffic before using proxy list.
@@ -265,7 +265,7 @@ func parseList(args []string) error {
 	_ = fs.MarkHidden("count")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy list [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy list [options]
 
 List individual flows with flow_id for export or replay.
 At least one filter or --limit is REQUIRED. Use 'proxy summary' first.
@@ -307,7 +307,7 @@ func parseExport(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy export <flow_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy export <flow_id> [options]
 
 Export a flow to disk for editing and replay.
 Note: Prefer 'replay send --flow' with modification flags for simple changes.
@@ -406,7 +406,7 @@ func parseRule(args []string) error {
 }
 
 func printRuleUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool proxy rule <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy rule <command> [options]
 
 Manage match and replace rules for request/response modification.
 
@@ -432,7 +432,7 @@ func parseRuleList(args []string) error {
 	fs.IntVar(&limit, "limit", 0, "maximum rules to display")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy rule list [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy rule list [options]
 
 List configured match/replace rules.
 
@@ -465,7 +465,7 @@ func parseRuleAdd(args []string) error {
 	_ = fs.MarkHidden("name")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy rule add [options] [match] [replace]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy rule add [options] [match] [replace]
 
 Add a match/replace rule.
 For header add: only replace is needed (adds header).
@@ -526,7 +526,7 @@ func parseRuleUpdate(args []string) error {
 	_ = fs.MarkHidden("name")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy rule update <rule_id> [options] [match] [replace]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy rule update <rule_id> [options] [match] [replace]
 
 Update an existing rule. Lookup by rule_id or label.
 Searches both HTTP and WebSocket rules automatically.
@@ -579,7 +579,7 @@ func parseRuleDelete(args []string) error {
 	_ = fs.MarkHidden("websocket")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool proxy rule delete <rule_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool proxy rule delete <rule_id> [options]
 
 Delete a rule by ID or label.
 Searches both HTTP and WebSocket rules automatically.

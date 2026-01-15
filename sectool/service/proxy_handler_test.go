@@ -101,26 +101,6 @@ func TestParseStatusCodes(t *testing.T) {
 	}
 }
 
-func TestTruncatePath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		path   string
-		maxLen int
-		want   string
-	}{
-		{"/short", 100, "/short"},
-		{"/very/long/path/that/exceeds/the/maximum/length", 20, "/very/long/path/t..."},
-		{"", 10, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			assert.Equal(t, tt.want, truncatePath(tt.path, tt.maxLen))
-		})
-	}
-}
-
 func TestPathWithoutQuery(t *testing.T) {
 	t.Parallel()
 
@@ -143,61 +123,13 @@ func TestPathWithoutQuery(t *testing.T) {
 	}
 }
 
-func TestAggregateByTuple(t *testing.T) {
-	t.Parallel()
-
-	t.Run("basic_grouping", func(t *testing.T) {
-		entries := []flowEntry{
-			{method: "GET", host: "example.com", path: "/api", status: 200},
-			{method: "GET", host: "example.com", path: "/api", status: 200},
-			{method: "GET", host: "example.com", path: "/api", status: 200},
-			{method: "POST", host: "example.com", path: "/api", status: 201},
-			{method: "GET", host: "other.com", path: "/", status: 200},
-		}
-
-		result := aggregateByTuple(entries)
-
-		// Should have 3 unique tuples
-		assert.Len(t, result, 3)
-
-		// First entry should have highest count (3)
-		assert.Equal(t, 3, result[0].Count)
-		assert.Equal(t, "GET", result[0].Method)
-		assert.Equal(t, "example.com", result[0].Host)
-		assert.Equal(t, 200, result[0].Status)
-	})
-
-	t.Run("path_normalization", func(t *testing.T) {
-		entries := []flowEntry{
-			{method: "GET", host: "example.com", path: "/api/users/1", status: 200},
-			{method: "GET", host: "example.com", path: "/api/users/2", status: 200},
-			{method: "GET", host: "example.com", path: "/api/users/999", status: 200},
-			{method: "GET", host: "example.com", path: "/api/posts/42", status: 200},
-		}
-
-		result := aggregateByTuple(entries)
-
-		// /api/users/1, /api/users/2, /api/users/999 should group into /api/users/*
-		// /api/posts/42 should be /api/posts/*
-		assert.Len(t, result, 2)
-
-		// First entry should have highest count (3 user requests)
-		assert.Equal(t, 3, result[0].Count)
-		assert.Equal(t, "/api/users/*", result[0].Path)
-
-		// Second entry should be the posts request
-		assert.Equal(t, 1, result[1].Count)
-		assert.Equal(t, "/api/posts/*", result[1].Path)
-	})
-}
-
 func TestHandleProxySummary(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -215,13 +147,13 @@ func TestHandleProxySummary(t *testing.T) {
 
 		// Add some proxy history entries
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
-			MakeProxyEntry("POST", "/api/users", "example.com", 201, "created"),
-			MakeProxyEntry("GET", "/other", "other.com", 404, "not found"),
+			makeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
+			makeProxyEntry("POST", "/api/users", "example.com", 201, "created"),
+			makeProxyEntry("GET", "/other", "other.com", 404, "not found"),
 		)
 
-		w := doRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/summary", ProxyListRequest{})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -235,7 +167,7 @@ func TestHandleProxySummary(t *testing.T) {
 		// Should have aggregates
 		assert.NotEmpty(t, summaryResp.Aggregates)
 
-		// First entry should have highest count
+		// First entry should have the highest count
 		assert.Equal(t, 2, summaryResp.Aggregates[0].Count)
 		assert.Equal(t, "GET", summaryResp.Aggregates[0].Method)
 		assert.Equal(t, "example.com", summaryResp.Aggregates[0].Host)
@@ -248,7 +180,7 @@ func TestHandleProxyList(t *testing.T) {
 	t.Run("requires_filters", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -262,13 +194,13 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
-			MakeProxyEntry("POST", "/api/users", "example.com", 201, "created"),
-			MakeProxyEntry("GET", "/other", "other.com", 404, "not found"),
+			makeProxyEntry("GET", "/api/users", "example.com", 200, "ok"),
+			makeProxyEntry("POST", "/api/users", "example.com", 201, "created"),
+			makeProxyEntry("GET", "/other", "other.com", 404, "not found"),
 		)
 
 		// Filter by method
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -292,13 +224,13 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/web", "www.example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/other", "other.com", 200, "ok"),
+			makeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
+			makeProxyEntry("GET", "/web", "www.example.com", 200, "ok"),
+			makeProxyEntry("GET", "/other", "other.com", 200, "ok"),
 		)
 
 		// Filter by host glob
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Host: "*.example.com"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Host: "*.example.com"})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -319,12 +251,12 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/other", "other.com", 200, "ok"),
+			makeProxyEntry("GET", "/api", "api.example.com", 200, "ok"),
+			makeProxyEntry("GET", "/other", "other.com", 200, "ok"),
 		)
 
 		// Exclude example.com
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{
 			ExcludeHost: "*.example.com",
 			Method:      "GET", // Need a filter to get flows
 		})
@@ -346,15 +278,15 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/2", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/3", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/4", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/5", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/2", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/3", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/4", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/5", "example.com", 200, "ok"),
 		)
 
 		// Limit to 3 flows
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 3})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 3})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -372,12 +304,12 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
 		)
 
 		// Limit alone should be valid filter
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 10})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 10})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -395,14 +327,14 @@ func TestHandleProxyList(t *testing.T) {
 		srv, mockMCP, _ := testServerWithMCP(t)
 
 		mockMCP.AddProxyEntries(
-			MakeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/2", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/3", "example.com", 200, "ok"),
-			MakeProxyEntry("GET", "/api/4", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/1", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/2", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/3", "example.com", 200, "ok"),
+			makeProxyEntry("GET", "/api/4", "example.com", 200, "ok"),
 		)
 
 		// First request with limit 2
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 2})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Limit: 2})
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var resp APIResponse
@@ -413,7 +345,7 @@ func TestHandleProxyList(t *testing.T) {
 		assert.Len(t, listResp.Flows, 2)
 
 		// Second request with --since last should return remaining flows
-		w = doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Since: "last", Limit: 10})
+		w = doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Since: "last", Limit: 10})
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -437,7 +369,7 @@ func TestHandleProxyExport(t *testing.T) {
 		)
 
 		// First list to get a flow ID
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var listAPIResp APIResponse
@@ -449,7 +381,7 @@ func TestHandleProxyExport(t *testing.T) {
 		flowID := listResp.Flows[0].FlowID
 
 		// Export the flow
-		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -483,7 +415,7 @@ func TestHandleProxyExport(t *testing.T) {
 		)
 
 		// List to get flow ID
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "POST"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "POST"})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var listAPIResp APIResponse
@@ -493,7 +425,7 @@ func TestHandleProxyExport(t *testing.T) {
 		require.Len(t, listResp.Flows, 1)
 
 		// Export the flow
-		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: listResp.Flows[0].FlowID})
+		w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: listResp.Flows[0].FlowID})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var exportAPIResp APIResponse
@@ -511,7 +443,7 @@ func TestHandleProxyExport(t *testing.T) {
 	t.Run("not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: "nonexistent"})
+		w := doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: "nonexistent"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -524,7 +456,7 @@ func TestHandleProxyExport(t *testing.T) {
 	t.Run("missing_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{})
+		w := doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -544,7 +476,7 @@ func TestHandleProxyExport(t *testing.T) {
 		)
 
 		// List to get flow ID
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var listAPIResp APIResponse
@@ -556,7 +488,7 @@ func TestHandleProxyExport(t *testing.T) {
 		flowID := listResp.Flows[0].FlowID
 
 		// Export the flow
-		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var exportAPIResp APIResponse
@@ -580,7 +512,7 @@ func TestHandleProxyExport(t *testing.T) {
 		)
 
 		// List to get flow ID
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "POST"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "POST"})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var listAPIResp APIResponse
@@ -592,7 +524,7 @@ func TestHandleProxyExport(t *testing.T) {
 		flowID := listResp.Flows[0].FlowID
 
 		// First export
-		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var exportAPIResp APIResponse
@@ -618,7 +550,7 @@ func TestHandleProxyExport(t *testing.T) {
 		assert.Equal(t, modifiedBody, string(body))
 
 		// Re-export the same flow - should restore original state
-		w = doRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
+		w = doTestRequest(t, srv, "POST", "/flow/export", FlowExportRequest{FlowID: flowID})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		// Body should be restored to original

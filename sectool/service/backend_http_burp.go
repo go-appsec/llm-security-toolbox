@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,11 +55,7 @@ func (b *BurpBackend) GetProxyHistory(ctx context.Context, count int, offset uin
 	if err != nil {
 		return nil, err
 	}
-	return convertMCPEntries(entries), nil
-}
 
-// convertMCPEntries converts MCP-specific entries to HttpBackend-agnostic form.
-func convertMCPEntries(entries []mcp.ProxyHistoryEntry) []ProxyEntry {
 	result := make([]ProxyEntry, len(entries))
 	for i, e := range entries {
 		result[i] = ProxyEntry{
@@ -67,7 +64,7 @@ func convertMCPEntries(entries []mcp.ProxyHistoryEntry) []ProxyEntry {
 			Notes:    e.Notes,
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (b *BurpBackend) SendRequest(ctx context.Context, name string, req SendRequestInput) (*SendRequestResult, error) {
@@ -98,7 +95,7 @@ func (b *BurpBackend) doSendRequest(ctx context.Context, name string, req SendRe
 	domain := req.Target.Hostname
 	parts := strings.Split(domain, ".")
 	if len(parts) > 2 {
-		// Handle multi-part TLDs like co.uk: if second-to-last is short, keep 3 parts
+		// Handle multipart TLDs like co.uk: if second-to-last is short, keep 3 parts
 		if len(parts[len(parts)-2]) <= 3 {
 			domain = strings.Join(parts[len(parts)-3:], ".")
 		} else {
@@ -204,28 +201,18 @@ func (b *BurpBackend) sendWithRedirects(ctx context.Context, req SendRequestInpu
 	return nil, errors.New("too many redirects")
 }
 
-// redirectBehavior describes how to handle a redirect based on status code.
-type redirectBehavior struct {
-	preserveMethod bool // 307, 308 preserve original method
-	preserveBody   bool // 307, 308 preserve body
-}
-
-// getRedirectBehavior returns the appropriate behavior for a status code.
-// Per RFC 7231: 307/308 preserve method and body; 301/302/303 become GET.
-func getRedirectBehavior(status int) redirectBehavior {
-	switch status {
-	case 307, 308:
-		return redirectBehavior{preserveMethod: true, preserveBody: true}
-	default: // 301, 302, 303
-		return redirectBehavior{preserveMethod: false, preserveBody: false}
-	}
-}
-
 // buildRedirectRequest builds a new request for following a redirect.
 // Implements browser-like behavior: preserves headers (including cookies),
 // drops Authorization on cross-origin, handles method/body per status code.
 func buildRedirectRequest(originalReq []byte, location string, currentTarget Target, currentPath string, status int) ([]byte, Target, string, error) {
-	behavior := getRedirectBehavior(status)
+	var preserveMethod, preserveBody bool
+	switch status {
+	case 307, 308:
+		preserveMethod = true
+		preserveBody = true
+	default: // 301, 302, 303
+		// leave default of false
+	}
 
 	// Resolve location to new target and path
 	newTarget, newPath, err := resolveRedirectLocation(location, currentTarget, currentPath)
@@ -238,13 +225,13 @@ func buildRedirectRequest(originalReq []byte, location string, currentTarget Tar
 
 	// Extract original method
 	method := extractMethod(originalReq)
-	if !behavior.preserveMethod {
+	if !preserveMethod {
 		method = "GET"
 	}
 
 	// Extract original body (only keep for 307/308)
 	var body []byte
-	if behavior.preserveBody {
+	if preserveBody {
 		_, body = splitHeadersBody(originalReq)
 	}
 
@@ -255,7 +242,7 @@ func buildRedirectRequest(originalReq []byte, location string, currentTarget Tar
 	buf.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", method, newPath))
 
 	// Copy headers with appropriate modifications
-	copyHeadersForRedirect(originalReq, &buf, newTarget, isCrossOrigin, behavior.preserveBody)
+	copyHeadersForRedirect(originalReq, &buf, newTarget, isCrossOrigin, preserveBody)
 
 	// Update Content-Length if we have a body
 	if len(body) > 0 {
@@ -666,16 +653,10 @@ func (b *BurpBackend) setAllRules(ctx context.Context, websocket bool, rules []m
 }
 
 func (b *BurpBackend) findRuleIndex(rules []mcp.MatchReplaceRule, idOrLabel string) int {
-	for i, r := range rules {
+	return slices.IndexFunc(rules, func(r mcp.MatchReplaceRule) bool {
 		id, label, ok := parseSectoolComment(r.Comment)
-		if !ok {
-			continue
-		}
-		if id == idOrLabel || (label != "" && label == idOrLabel) {
-			return i
-		}
-	}
-	return -1
+		return ok && (id == idOrLabel || label == idOrLabel)
+	})
 }
 
 // isWSType returns true if the type is a WebSocket type (ws: prefix).

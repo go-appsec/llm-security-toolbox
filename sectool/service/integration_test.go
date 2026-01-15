@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"encoding/json"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,23 +52,6 @@ func setupBurpServer(t *testing.T) (*Server, func()) {
 	return srv, cleanup
 }
 
-func doBurpRequest(t *testing.T, srv *Server, method, path string, body interface{}) *httptest.ResponseRecorder {
-	t.Helper()
-
-	var reqBody bytes.Buffer
-	if body != nil {
-		err := json.NewEncoder(&reqBody).Encode(body)
-		require.NoError(t, err)
-	}
-
-	req := httptest.NewRequest(method, path, &reqBody)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	srv.routes().ServeHTTP(w, req)
-	return w
-}
-
 // TestParseBurpResponse_Integration validates that parseBurpResponse correctly extracts
 // headers and body from real Burp MCP responses.
 func TestParseBurpResponse_Integration(t *testing.T) {
@@ -91,8 +73,8 @@ func TestParseBurpResponse_Integration(t *testing.T) {
 	require.NoError(t, err, "parseBurpResponse should succeed")
 
 	// Validate headers structure
-	assert.True(t, bytes.HasPrefix(headers, []byte("HTTP/")), "headers should start with HTTP/")
-	assert.True(t, bytes.HasSuffix(headers, []byte("\r\n\r\n")), "headers should end with CRLF CRLF")
+	assert.True(t, bytes.HasPrefix(headers, []byte("HTTP/")))
+	assert.True(t, bytes.HasSuffix(headers, []byte("\r\n\r\n")))
 
 	// Validate status can be extracted
 	resp, err := readResponseBytes(headers)
@@ -100,9 +82,8 @@ func TestParseBurpResponse_Integration(t *testing.T) {
 	_ = resp.Body.Close()
 	assert.Equal(t, 200, resp.StatusCode)
 
-	// httpbin /get returns JSON body
-	assert.NotEmpty(t, body, "body should not be empty")
-	assert.True(t, bytes.Contains(body, []byte("httpbin.org")), "body should contain httpbin.org")
+	assert.NotEmpty(t, body)
+	assert.True(t, bytes.Contains(body, []byte("httpbin.org")))
 
 	t.Logf("Parsed headers length: %d, body length: %d", len(headers), len(body))
 	t.Logf("Headers preview:\n%s", truncateBytes(headers, 300))
@@ -155,7 +136,7 @@ func TestBurpBackendRules_Integration(t *testing.T) {
 	t.Run("list_empty", func(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), false)
 		require.NoError(t, err)
-		assert.Empty(t, rules, "no sectool rules should exist after cleanup")
+		assert.Empty(t, rules)
 	})
 
 	t.Run("add_rule", func(t *testing.T) {
@@ -187,7 +168,7 @@ func TestBurpBackendRules_Integration(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, found, "created rule should appear in list")
+		assert.True(t, found)
 	})
 
 	t.Run("add_rule_regex", func(t *testing.T) {
@@ -271,7 +252,7 @@ func TestBurpBackendRules_Integration(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), false)
 		require.NoError(t, err)
 		for _, r := range rules {
-			assert.NotEqual(t, rule.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, rule.RuleID, r.RuleID)
 		}
 	})
 
@@ -289,7 +270,7 @@ func TestBurpBackendRules_Integration(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), false)
 		require.NoError(t, err)
 		for _, r := range rules {
-			assert.NotEqual(t, rule.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, rule.RuleID, r.RuleID)
 		}
 	})
 
@@ -363,7 +344,7 @@ func TestBurpBackendWSRules_Integration(t *testing.T) {
 	t.Run("list_empty", func(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), true)
 		require.NoError(t, err)
-		assert.Empty(t, rules, "no sectool WebSocket rules should exist after cleanup")
+		assert.Empty(t, rules)
 	})
 
 	t.Run("add_ws_to_server", func(t *testing.T) {
@@ -397,7 +378,7 @@ func TestBurpBackendWSRules_Integration(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, found, "created WebSocket rule should appear in list")
+		assert.True(t, found)
 	})
 
 	t.Run("add_ws_to_client", func(t *testing.T) {
@@ -491,7 +472,7 @@ func TestBurpBackendWSRules_Integration(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), true)
 		require.NoError(t, err)
 		for _, r := range rules {
-			assert.NotEqual(t, rule.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, rule.RuleID, r.RuleID)
 		}
 	})
 
@@ -509,7 +490,7 @@ func TestBurpBackendWSRules_Integration(t *testing.T) {
 		rules, err := backend.ListRules(t.Context(), true)
 		require.NoError(t, err)
 		for _, r := range rules {
-			assert.NotEqual(t, rule.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, rule.RuleID, r.RuleID)
 		}
 	})
 
@@ -534,14 +515,14 @@ func TestBurpBackendWSRules_Integration(t *testing.T) {
 		wsRules, err := backend.ListRules(t.Context(), true)
 		require.NoError(t, err)
 		for _, r := range wsRules {
-			assert.NotEqual(t, httpRule.RuleID, r.RuleID, "HTTP rule should not appear in WebSocket list")
+			assert.NotEqual(t, httpRule.RuleID, r.RuleID)
 		}
 
 		// WebSocket rule should not appear in HTTP list
 		httpRules, err := backend.ListRules(t.Context(), false)
 		require.NoError(t, err)
 		for _, r := range httpRules {
-			assert.NotEqual(t, wsRule.RuleID, r.RuleID, "WebSocket rule should not appear in HTTP list")
+			assert.NotEqual(t, wsRule.RuleID, r.RuleID)
 		}
 	})
 }
@@ -567,7 +548,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("list_empty", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
 		require.Equal(t, 200, w.Code)
 
 		var resp APIResponse
@@ -580,7 +561,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("add_rule", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-add",
 			Type:    "request_header",
 			Replace: "X-Handler-Test: value",
@@ -602,7 +583,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("add_rule_validation", func(t *testing.T) {
 		// Missing type should fail
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-invalid",
 			Replace: "X-Test: value",
 		})
@@ -615,7 +596,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("add_rule_invalid_type", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Type: "invalid_type",
 		})
 		require.Equal(t, 400, w.Code)
@@ -627,7 +608,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("list_after_add", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
 		require.Equal(t, 200, w.Code)
 
 		var resp APIResponse
@@ -645,12 +626,12 @@ func TestRuleHandlers_Integration(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, found, "added rule should appear in list")
+		assert.True(t, found)
 	})
 
 	t.Run("list_with_limit", func(t *testing.T) {
 		// Add another rule
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-limit",
 			Type:    "request_header",
 			Replace: "X-Limit-Test: value",
@@ -664,7 +645,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// List with limit=1
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{Limit: 1})
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{Limit: 1})
 		require.Equal(t, 200, w.Code)
 
 		var resp APIResponse
@@ -672,12 +653,12 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 		var listResp RuleListResponse
 		require.NoError(t, json.Unmarshal(resp.Data, &listResp))
-		assert.Len(t, listResp.Rules, 1, "limit should be applied")
+		assert.Len(t, listResp.Rules, 1)
 	})
 
 	t.Run("update_rule", func(t *testing.T) {
 		// Add a rule to update
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-update",
 			Type:    "request_header",
 			Replace: "X-Original: value",
@@ -691,7 +672,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// Update by ID
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			RuleID:  add.RuleID,
 			Label:   "handler-test-updated",
 			Type:    "request_body",
@@ -714,7 +695,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("update_not_found", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			RuleID:  "nonexistent-id",
 			Type:    "request_header",
 			Replace: "X-Test: value",
@@ -729,13 +710,13 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("update_validation", func(t *testing.T) {
 		// Missing rule_id
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			Type: "request_header",
 		})
 		require.Equal(t, 400, w.Code)
 
 		// Missing type
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			RuleID: "some-id",
 		})
 		require.Equal(t, 400, w.Code)
@@ -743,7 +724,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("delete_rule", func(t *testing.T) {
 		// Add a rule to delete
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-delete",
 			Type:    "request_header",
 			Replace: "X-Delete-Test: value",
@@ -756,7 +737,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		require.NoError(t, json.Unmarshal(addResp.Data, &add))
 
 		// Delete
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
 			RuleID: add.RuleID,
 		})
 		require.Equal(t, 200, w.Code)
@@ -766,7 +747,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		assert.True(t, resp.OK)
 
 		// Verify not in list
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
 		require.Equal(t, 200, w.Code)
 
 		var listResp APIResponse
@@ -775,12 +756,12 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		var list RuleListResponse
 		require.NoError(t, json.Unmarshal(listResp.Data, &list))
 		for _, r := range list.Rules {
-			assert.NotEqual(t, add.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, add.RuleID, r.RuleID)
 		}
 	})
 
 	t.Run("delete_not_found", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
 			RuleID: "nonexistent-id",
 		})
 		require.Equal(t, 404, w.Code)
@@ -792,7 +773,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("delete_validation", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{})
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{})
 		require.Equal(t, 400, w.Code)
 
 		var resp APIResponse
@@ -803,7 +784,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("duplicate_label", func(t *testing.T) {
 		// Add first rule
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-dup",
 			Type:    "request_header",
 			Replace: "X-Dup-Test: value",
@@ -817,7 +798,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// Try to add duplicate
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-dup",
 			Type:    "request_header",
 			Replace: "X-Dup-Test: value2",
@@ -832,7 +813,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("update_to_duplicate_label", func(t *testing.T) {
 		// Add a second rule
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-test-unique",
 			Type:    "request_header",
 			Replace: "X-Unique-Test: value",
@@ -846,7 +827,7 @@ func TestRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// Try to update it to have the same label as the dup test rule
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			RuleID:  add.RuleID,
 			Label:   "handler-test-dup",
 			Type:    "request_header",
@@ -878,7 +859,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("list_empty", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
 		require.Equal(t, 200, w.Code)
 
 		var resp APIResponse
@@ -891,7 +872,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("add_ws_rule", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-test-add",
 			Type:    "ws:to-server",
 			Match:   "client-message",
@@ -915,7 +896,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("add_ws_rule_all_types", func(t *testing.T) {
 		// Test ws:to-client
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-to-client",
 			Type:    "ws:to-client",
 			Replace: "test",
@@ -929,7 +910,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// Test ws:both
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-both",
 			Type:    "ws:both",
 			Replace: "test",
@@ -942,7 +923,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("add_rule_invalid_type", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Type:    "invalid_type",
 			Replace: "X-Test: value",
 		})
@@ -955,7 +936,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 	})
 
 	t.Run("list_ws_after_add", func(t *testing.T) {
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
 		require.Equal(t, 200, w.Code)
 
 		var resp APIResponse
@@ -974,12 +955,12 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, found, "added WebSocket rule should appear in list")
+		assert.True(t, found)
 	})
 
 	t.Run("update_ws_rule", func(t *testing.T) {
 		// Add a rule to update
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-update",
 			Type:    "ws:to-server",
 			Replace: "original",
@@ -993,7 +974,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, add.RuleID)
 
 		// Update by ID
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/update", RuleUpdateRequest{
 			RuleID:  add.RuleID,
 			Label:   "handler-ws-updated",
 			Type:    "ws:to-client",
@@ -1017,7 +998,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 
 	t.Run("delete_ws_rule", func(t *testing.T) {
 		// Add a rule to delete
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-delete",
 			Type:    "ws:both",
 			Replace: "test",
@@ -1030,7 +1011,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		require.NoError(t, json.Unmarshal(addResp.Data, &add))
 
 		// Delete
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{
 			RuleID: add.RuleID,
 		})
 		require.Equal(t, 200, w.Code)
@@ -1040,7 +1021,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		assert.True(t, resp.OK)
 
 		// Verify not in list
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
 		require.Equal(t, 200, w.Code)
 
 		var listResp APIResponse
@@ -1049,13 +1030,13 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		var list RuleListResponse
 		require.NoError(t, json.Unmarshal(listResp.Data, &list))
 		for _, r := range list.Rules {
-			assert.NotEqual(t, add.RuleID, r.RuleID, "deleted rule should not appear in list")
+			assert.NotEqual(t, add.RuleID, r.RuleID)
 		}
 	})
 
 	t.Run("ws_http_isolation", func(t *testing.T) {
 		// Add a WebSocket rule
-		w := doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w := doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-ws-isolation",
 			Type:    "ws:both",
 			Replace: "test",
@@ -1068,7 +1049,7 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, wsRule.RuleID)
 
 		// Add an HTTP rule
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/add", RuleAddRequest{
 			Label:   "handler-http-isolation",
 			Type:    "request_header",
 			Replace: "X-Test: value",
@@ -1081,24 +1062,24 @@ func TestWSRuleHandlers_Integration(t *testing.T) {
 		createdRuleIDs = append(createdRuleIDs, httpRule.RuleID)
 
 		// WebSocket rule should NOT appear in HTTP list
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: false})
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: false})
 		require.Equal(t, 200, w.Code)
 		var listResp APIResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listResp))
 		var httpList RuleListResponse
 		require.NoError(t, json.Unmarshal(listResp.Data, &httpList))
 		for _, r := range httpList.Rules {
-			assert.NotEqual(t, wsRule.RuleID, r.RuleID, "WebSocket rule should not appear in HTTP list")
+			assert.NotEqual(t, wsRule.RuleID, r.RuleID)
 		}
 
 		// HTTP rule should NOT appear in WebSocket list
-		w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
+		w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
 		require.Equal(t, 200, w.Code)
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listResp))
 		var wsList RuleListResponse
 		require.NoError(t, json.Unmarshal(listResp.Data, &wsList))
 		for _, r := range wsList.Rules {
-			assert.NotEqual(t, httpRule.RuleID, r.RuleID, "HTTP rule should not appear in WebSocket list")
+			assert.NotEqual(t, httpRule.RuleID, r.RuleID)
 		}
 	})
 }
@@ -1107,7 +1088,7 @@ func cleanupRulesViaHandler(t *testing.T, srv *Server) {
 	t.Helper()
 
 	// Clean up HTTP rules
-	w := doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
+	w := doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{})
 	if w.Code == 200 {
 		var resp APIResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err == nil && resp.OK {
@@ -1121,7 +1102,7 @@ func cleanupRulesViaHandler(t *testing.T, srv *Server) {
 	}
 
 	// Clean up WebSocket rules
-	w = doBurpRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
+	w = doTestRequest(t, srv, "POST", "/proxy/rule/list", RuleListRequest{WebSocket: true})
 	if w.Code == 200 {
 		var resp APIResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err == nil && resp.OK {
@@ -1138,5 +1119,5 @@ func cleanupRulesViaHandler(t *testing.T, srv *Server) {
 func deleteRuleViaHandler(t *testing.T, srv *Server, ruleID string) {
 	t.Helper()
 
-	doBurpRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{RuleID: ruleID})
+	doTestRequest(t, srv, "POST", "/proxy/rule/delete", RuleDeleteRequest{RuleID: ruleID})
 }

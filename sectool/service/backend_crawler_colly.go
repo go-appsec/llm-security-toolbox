@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-analyze/bulk"
 	"github.com/gocolly/colly/v2"
 
 	"github.com/go-harden/llm-security-toolbox/sectool/config"
@@ -32,7 +33,7 @@ const (
 	crawlStateCompleted = "completed"
 )
 
-// Compile-time check that CollyBackend implements CrawlerBackend
+// Compile-time check that CollyBackend implements CrawlerBackend.
 var _ CrawlerBackend = (*CollyBackend)(nil)
 
 // CollyBackend implements CrawlerBackend using the Colly library.
@@ -41,7 +42,7 @@ type CollyBackend struct {
 	sessions  map[string]*crawlSession // by ID
 	byLabel   map[string]string        // label -> session ID
 	flowStore *store.CrawlFlowStore
-	config    *config.CrawlerConfig
+	config    config.CrawlerConfig
 	closed    bool
 
 	// For resolving seed flows from proxy history
@@ -88,8 +89,8 @@ type crawlSession struct {
 // capturedData holds request/response bytes captured in RoundTrip.
 type capturedData struct {
 	Request      []byte
-	RespHeaders  []byte // Response headers (always complete)
-	RespBody     []byte // Response body (may be truncated)
+	RespHeaders  []byte
+	RespBody     []byte // Response body (possibly truncated)
 	RespBodySize int    // Actual response body size (before truncation)
 	Duration     time.Duration
 	Truncated    bool
@@ -107,7 +108,6 @@ func (t *capturingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	captureID := req.Header.Get(captureIDHeader)
 	req.Header.Del(captureIDHeader) // Remove before sending
 
-	// Capture request bytes
 	reqBytes, _ := httputil.DumpRequestOut(req, true)
 
 	start := time.Now()
@@ -125,10 +125,9 @@ func (t *capturingTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, err
 	}
 
-	// Capture response with optional body limit
-	respHeaders, respBody, bodySize, truncated := t.captureResponse(resp)
-
 	if captureID != "" {
+		respHeaders, respBody, bodySize, truncated := t.captureResponse(resp)
+
 		t.session.captureStore.Store(captureID, &capturedData{
 			Request:      reqBytes,
 			RespHeaders:  respHeaders,
@@ -148,18 +147,15 @@ func (t *capturingTransport) captureResponse(resp *http.Response) (headers, body
 	// Capture headers only (body=false)
 	headers, _ = httputil.DumpResponse(resp, false)
 
-	// Read body with optional limit
 	if resp.Body == nil {
 		return headers, nil, 0, false
 	}
 
-	if t.maxBodyBytes <= 0 {
-		// Unlimited: read entire body
+	if t.maxBodyBytes <= 0 { // Unlimited: read entire body
 		body, _ = io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		bodySize = len(body)
-	} else {
-		// Limited: read up to limit, count total
+	} else { // Limited: read up to limit, count total
 		body, bodySize, truncated = readBodyLimited(resp.Body, t.maxBodyBytes)
 		_ = resp.Body.Close()
 	}
@@ -189,7 +185,7 @@ func readBodyLimited(r io.Reader, limit int) ([]byte, int, bool) {
 }
 
 // NewCollyBackend creates a new Colly-backed CrawlerBackend.
-func NewCollyBackend(cfg *config.CrawlerConfig, flowStore *store.CrawlFlowStore, proxyFlowStore *store.FlowStore, httpBackend HttpBackend) *CollyBackend {
+func NewCollyBackend(cfg config.CrawlerConfig, flowStore *store.CrawlFlowStore, proxyFlowStore *store.FlowStore, httpBackend HttpBackend) *CollyBackend {
 	return &CollyBackend{
 		sessions:       make(map[string]*crawlSession),
 		byLabel:        make(map[string]string),
@@ -207,20 +203,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 		return nil, errors.New("backend is closed")
 	}
 
-	// Check concurrent session limit
-	activeCount := 0
-	for _, s := range b.sessions {
-		if s.info.State == crawlStateRunning {
-			activeCount++
-		}
-	}
-	if activeCount >= b.config.MaxConcurrentSessions {
-		b.mu.Unlock()
-		return nil, fmt.Errorf("max concurrent sessions (%d) reached; stop an existing session first", b.config.MaxConcurrentSessions)
-	}
-
-	// Check label uniqueness
-	if opts.Label != "" {
+	if opts.Label != "" { // Check label uniqueness
 		if existingID, exists := b.byLabel[opts.Label]; exists {
 			b.mu.Unlock()
 			return nil, fmt.Errorf("%w: label %q already in use by session %s", ErrLabelExists, opts.Label, existingID)
@@ -240,7 +223,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 
 	// Apply defaults from config
 	if len(opts.DisallowedPaths) == 0 {
-		opts.DisallowedPaths = b.config.DefaultDisallowedPaths
+		opts.DisallowedPaths = b.config.DisallowedPaths
 	}
 
 	sessionCtx, cancel := context.WithCancel(context.Background())
@@ -270,7 +253,6 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 		cancel:            cancel,
 	}
 
-	// Create Colly collector
 	c := colly.NewCollector(
 		colly.Async(true),
 		colly.StdlibContext(sessionCtx),
@@ -296,11 +278,11 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 	// Rate limiting
 	delay := opts.Delay
 	if delay == 0 {
-		delay = time.Duration(b.config.DefaultDelayMS) * time.Millisecond
+		delay = time.Duration(b.config.DelayMS) * time.Millisecond
 	}
 	parallelism := opts.Parallelism
 	if parallelism == 0 {
-		parallelism = b.config.DefaultParallelism
+		parallelism = b.config.Parallelism
 	}
 	_ = c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
@@ -322,7 +304,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 		// Check AllowedPaths filter first (before counting)
 		if len(sess.allowedRegexes) > 0 {
 			path := r.URL.Path
-			allowed := false
+			var allowed bool
 			for _, re := range sess.allowedRegexes {
 				if re.MatchString(path) {
 					allowed = true
@@ -377,7 +359,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 	c.OnResponse(func(r *colly.Response) {
 		ct := r.Headers.Get("Content-Type")
 		// Filter by content-type (empty is allowed for HTML pages without explicit type)
-		if ct != "" && !isAllowedContentType(ct) {
+		if ct != "" && !isTextContentType(ct) {
 			sess.mu.Lock()
 			sess.urlsQueued--
 			sess.mu.Unlock()
@@ -465,8 +447,8 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 
 	// Form extraction - config default, then explicit option override
 	extractForms := true
-	if b.config.DefaultExtractForms != nil {
-		extractForms = *b.config.DefaultExtractForms
+	if b.config.ExtractForms != nil {
+		extractForms = *b.config.ExtractForms
 	}
 	if opts.ExtractForms != nil {
 		extractForms = *opts.ExtractForms
@@ -479,15 +461,23 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 			sess.forms = append(sess.forms, form)
 			sess.mu.Unlock()
 
-			// Optionally submit form (check against precompiled disallowed regexes)
-			if opts.SubmitForms && !matchesAnyRegex(form.Action, sess.disallowedRegexes) {
-				formData := extractFormData(e)
-				_ = e.Request.Post(form.Action, formData)
+			// Optionally submit form
+			if opts.SubmitForms {
+				allowed := true
+				for _, re := range sess.disallowedRegexes {
+					if re.MatchString(form.Action) {
+						allowed = false
+						break
+					}
+				}
+				if allowed {
+					formData := extractFormData(e)
+					_ = e.Request.Post(form.Action, formData)
+				}
 			}
 		})
 	}
 
-	// Error callback
 	c.OnError(func(r *colly.Response, err error) {
 		// Clean up capture store to prevent memory leak
 		if captureID := r.Ctx.Get("capture_id"); captureID != "" {
@@ -634,40 +624,8 @@ func (b *CollyBackend) GetSummary(ctx context.Context, sessionID string) (*Crawl
 	sess.mu.RLock()
 	defer sess.mu.RUnlock()
 
-	// Aggregate by (host, path, method, status) - same as proxy summary
-	type aggregateKey struct {
-		Host   string
-		Path   string
-		Method string
-		Status int
-	}
-	counts := make(map[aggregateKey]int)
-
-	for _, flow := range sess.flowsOrdered {
-		key := aggregateKey{
-			Host:   flow.Host,
-			Path:   normalizePath(flow.Path),
-			Method: flow.Method,
-			Status: flow.StatusCode,
-		}
-		counts[key]++
-	}
-
-	// Convert to slice and sort by count descending
-	aggregates := make([]AggregateEntry, 0, len(counts))
-	for key, count := range counts {
-		aggregates = append(aggregates, AggregateEntry{
-			Host:   key.Host,
-			Path:   truncatePath(key.Path, maxPathLength),
-			Method: key.Method,
-			Status: key.Status,
-			Count:  count,
-		})
-	}
-
-	// Sort by count descending
-	slices.SortFunc(aggregates, func(a, b AggregateEntry) int {
-		return b.Count - a.Count
+	aggregates := aggregateByTuple(sess.flowsOrdered, func(f *CrawlFlow) (string, string, string, int) {
+		return f.Host, f.Path, f.Method, f.StatusCode
 	})
 
 	return &CrawlSummary{
@@ -688,7 +646,7 @@ func (b *CollyBackend) ListFlows(ctx context.Context, sessionID string, opts Cra
 	defer sess.mu.Unlock()
 
 	// Determine start index based on "since" filter
-	startIdx := 0
+	var startIdx int
 	if opts.Since != "" {
 		if opts.Since == "last" {
 			// Use the last returned index (exclusive - start after it)
@@ -725,7 +683,7 @@ func (b *CollyBackend) ListFlows(ctx context.Context, sessionID string, opts Cra
 		filtered = filtered[opts.Offset:]
 	}
 
-	// Apply limit
+	// Apply limit (after filter and offset)
 	if opts.Limit > 0 && opts.Limit < len(filtered) {
 		filtered = filtered[:opts.Limit]
 	}
@@ -739,12 +697,10 @@ func (b *CollyBackend) ListFlows(ctx context.Context, sessionID string, opts Cra
 		}
 	}
 
-	// Copy to result slice
 	result := make([]CrawlFlow, len(filtered))
 	for i, f := range filtered {
 		result[i] = *f.flow
 	}
-
 	return result, nil
 }
 
@@ -757,14 +713,11 @@ func (b *CollyBackend) ListForms(ctx context.Context, sessionID string, limit in
 	sess.mu.RLock()
 	defer sess.mu.RUnlock()
 
-	if limit <= 0 || limit > len(sess.forms) {
-		result := make([]DiscoveredForm, len(sess.forms))
-		copy(result, sess.forms)
-		return result, nil
+	forms := sess.forms
+	if limit > 0 && limit < len(forms) {
+		forms = forms[:limit]
 	}
-	result := make([]DiscoveredForm, limit)
-	copy(result, sess.forms[:limit])
-	return result, nil
+	return slices.Clone(forms), nil
 }
 
 func (b *CollyBackend) ListErrors(ctx context.Context, sessionID string, limit int) ([]CrawlError, error) {
@@ -776,14 +729,11 @@ func (b *CollyBackend) ListErrors(ctx context.Context, sessionID string, limit i
 	sess.mu.RLock()
 	defer sess.mu.RUnlock()
 
-	if limit <= 0 || limit > len(sess.errors) {
-		result := make([]CrawlError, len(sess.errors))
-		copy(result, sess.errors)
-		return result, nil
+	errs := sess.errors
+	if limit > 0 && limit < len(errs) {
+		errs = errs[:limit]
 	}
-	result := make([]CrawlError, limit)
-	copy(result, sess.errors[:limit])
-	return result, nil
+	return slices.Clone(errs), nil
 }
 
 func (b *CollyBackend) GetFlow(ctx context.Context, flowID string) (*CrawlFlow, error) {
@@ -849,20 +799,18 @@ func (b *CollyBackend) ExportFlow(ctx context.Context, flowID string, bundleDir 
 		return nil, fmt.Errorf("failed to write response: %w", err)
 	}
 
-	files := []string{
-		"request.http",
-		"body",
-		"request.meta.json",
-		"response.http",
-		"response.body",
-	}
-
 	log.Printf("crawler: exported flow %s to %s (url=%s)", flowID, dir, u.String())
 
 	return &ExportResult{
 		BundleID:   flowID,
 		BundlePath: dir,
-		Files:      files,
+		Files: []string{
+			"request.http",
+			"body",
+			"request.meta.json",
+			"response.http",
+			"response.body",
+		},
 	}, nil
 }
 
@@ -901,10 +849,9 @@ func (b *CollyBackend) ListSessions(ctx context.Context, limit int) ([]CrawlSess
 		return b.CreatedAt.Compare(a.CreatedAt)
 	})
 
-	if limit > 0 && len(sessions) > limit {
+	if limit > 0 && limit < len(sessions) {
 		sessions = sessions[:limit]
 	}
-
 	return sessions, nil
 }
 
@@ -915,15 +862,9 @@ func (b *CollyBackend) Close() error {
 		return nil
 	}
 	b.closed = true
-
-	// Collect all sessions
-	sessions := make([]*crawlSession, 0, len(b.sessions))
-	for _, sess := range b.sessions {
-		sessions = append(sessions, sess)
-	}
+	sessions := bulk.MapValuesSlice(b.sessions)
 	b.mu.Unlock()
 
-	// Stop all sessions
 	for _, sess := range sessions {
 		sess.cancel()
 	}
@@ -937,13 +878,9 @@ func (b *CollyBackend) resolveSession(identifier string) (*crawlSession, error) 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	// Try as ID first
 	if sess, ok := b.sessions[identifier]; ok {
 		return sess, nil
-	}
-
-	// Try as label
-	if sessID, ok := b.byLabel[identifier]; ok {
+	} else if sessID, ok := b.byLabel[identifier]; ok {
 		if sess, ok := b.sessions[sessID]; ok {
 			return sess, nil
 		}
@@ -963,7 +900,6 @@ func (b *CollyBackend) resolveSeeds(ctx context.Context, seeds []CrawlSeed, expl
 		domainSet[strings.ToLower(d)] = true
 	}
 
-	// Process seeds
 	for _, seed := range seeds {
 		if seed.URL != "" {
 			u, err := parseURLWithDefaultHTTPS(seed.URL)
@@ -1005,11 +941,9 @@ func (b *CollyBackend) resolveSeeds(ctx context.Context, seeds []CrawlSeed, expl
 			for _, line := range headerLines {
 				if idx := strings.Index(line, ":"); idx > 0 {
 					name := strings.TrimSpace(line[:idx])
-					value := strings.TrimSpace(line[idx+1:])
-					// Skip Host header (will be set by Colly) and our internal headers
-					nameLower := strings.ToLower(name)
-					if nameLower != "host" && nameLower != "content-length" {
-						seedHeaders[name] = value
+					// Skip headers set / replaced by Colly
+					if nameLower := strings.ToLower(name); nameLower != "host" && nameLower != "content-length" {
+						seedHeaders[name] = strings.TrimSpace(line[idx+1:])
 					}
 				}
 			}
@@ -1018,73 +952,41 @@ func (b *CollyBackend) resolveSeeds(ctx context.Context, seeds []CrawlSeed, expl
 		}
 	}
 
-	// Convert domain set to slice
-	domains := make([]string, 0, len(domainSet))
-	for d := range domainSet {
-		domains = append(domains, d)
-	}
-
-	return domains, seedURLs, seedHeaders, nil
+	return bulk.MapKeysSlice(domainSet), seedURLs, seedHeaders, nil
 }
 
-// Helper functions
-
 func matchesFlowFilters(flow *CrawlFlow, opts CrawlListOptions) bool {
-	// Host filter
 	if opts.Host != "" && !matchesGlob(flow.Host, opts.Host) {
 		return false
 	}
 
-	// Path filter
 	if opts.PathPattern != "" {
 		pathOnly := flow.Path
 		if idx := strings.Index(pathOnly, "?"); idx != -1 {
 			pathOnly = pathOnly[:idx]
 		}
+
 		if !matchesGlob(flow.Path, opts.PathPattern) && !matchesGlob(pathOnly, opts.PathPattern) {
 			return false
 		}
 	}
 
-	// Status filter
-	if len(opts.StatusCodes) > 0 {
-		found := false
-		for _, code := range opts.StatusCodes {
-			if flow.StatusCode == code {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	if len(opts.StatusCodes) > 0 && !slices.Contains(opts.StatusCodes, flow.StatusCode) {
+		return false
 	}
 
-	// Method filter
-	if len(opts.Methods) > 0 {
-		found := false
-		for _, method := range opts.Methods {
-			if strings.EqualFold(flow.Method, method) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	if len(opts.Methods) > 0 && !slices.ContainsFunc(opts.Methods, func(m string) bool {
+		return strings.EqualFold(m, flow.Method)
+	}) {
+		return false
 	}
 
-	// Exclude host filter
 	if opts.ExcludeHost != "" && matchesGlob(flow.Host, opts.ExcludeHost) {
 		return false
-	}
-
-	// Exclude path filter
-	if opts.ExcludePath != "" && matchesGlob(flow.Path, opts.ExcludePath) {
+	} else if opts.ExcludePath != "" && matchesGlob(flow.Path, opts.ExcludePath) {
 		return false
 	}
 
-	// Contains filter (search URL and headers)
 	if opts.Contains != "" {
 		reqHeaders, _ := splitHeadersBody(flow.Request)
 		respHeaders, _ := splitHeadersBody(flow.Response)
@@ -1094,7 +996,6 @@ func matchesFlowFilters(flow *CrawlFlow, opts CrawlListOptions) bool {
 		}
 	}
 
-	// Contains body filter (search request/response body)
 	if opts.ContainsBody != "" {
 		_, reqBody := splitHeadersBody(flow.Request)
 		_, respBody := splitHeadersBody(flow.Response)
@@ -1107,31 +1008,25 @@ func matchesFlowFilters(flow *CrawlFlow, opts CrawlListOptions) bool {
 	return true
 }
 
-// Content type filtering
-var allowedContentTypes = []string{
-	"text/",
-	"application/json",
-	"application/xml",
-	"application/javascript",
-	"application/x-javascript",
-}
-
-func isAllowedContentType(ct string) bool {
+func isTextContentType(ct string) bool {
 	if ct == "" {
 		return true // Allow empty content type (will be filtered later if needed)
 	}
 	ct = strings.ToLower(ct)
-	for _, allowed := range allowedContentTypes {
-		if strings.HasPrefix(ct, allowed) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{
+		"text/",
+		"application/json",
+		"application/xml",
+		"application/javascript",
+		"application/x-javascript",
+	}, func(allowed string) bool {
+		return strings.HasPrefix(ct, allowed)
+	})
 }
 
 // globsToRegexes converts glob patterns to compiled regexes.
 func globsToRegexes(patterns []string) []*regexp.Regexp {
-	var result []*regexp.Regexp
+	result := make([]*regexp.Regexp, 0, len(patterns))
 	for _, p := range patterns {
 		escaped := regexp.QuoteMeta(p)
 		escaped = strings.ReplaceAll(escaped, `\*`, ".*")
@@ -1143,20 +1038,10 @@ func globsToRegexes(patterns []string) []*regexp.Regexp {
 	return result
 }
 
-// matchesAnyRegex checks if s matches any of the precompiled regexes.
-func matchesAnyRegex(s string, regexes []*regexp.Regexp) bool {
-	for _, re := range regexes {
-		if re.MatchString(s) {
-			return true
-		}
-	}
-	return false
-}
-
 // buildDomainFilters creates URL filters that match a domain and any subdomains.
 // For example, "example.com" matches example.com, sub.example.com, a.b.example.com.
 func buildDomainFilters(domains []string) []*regexp.Regexp {
-	var filters []*regexp.Regexp
+	filters := make([]*regexp.Regexp, 0, len(domains))
 	for _, d := range domains {
 		escaped := regexp.QuoteMeta(d)
 		// Use ([^/]+\.)* to match zero or more subdomain levels
@@ -1168,7 +1053,6 @@ func buildDomainFilters(domains []string) []*regexp.Regexp {
 	return filters
 }
 
-// Form extraction helpers
 func extractForm(e *colly.HTMLElement, sessionID string) DiscoveredForm {
 	action := e.Request.AbsoluteURL(e.Attr("action"))
 	if action == "" {
@@ -1223,7 +1107,6 @@ func extractForm(e *colly.HTMLElement, sessionID string) DiscoveredForm {
 
 func extractFormData(e *colly.HTMLElement) map[string]string {
 	data := make(map[string]string)
-
 	e.ForEach("input, select, textarea", func(_ int, el *colly.HTMLElement) {
 		name := el.Attr("name")
 		if name == "" {
@@ -1238,6 +1121,5 @@ func extractFormData(e *colly.HTMLElement) map[string]string {
 
 		data[name] = value
 	})
-
 	return data
 }

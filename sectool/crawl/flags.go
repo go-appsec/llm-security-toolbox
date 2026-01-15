@@ -49,7 +49,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool crawl <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl <command> [options]
 
 Web crawler for discovering URLs, forms, and content by following links.
 
@@ -210,7 +210,7 @@ func parseCreate(args []string) error {
 	fs.BoolVar(&ignoreRobots, "ignore-robots", false, "ignore robots.txt restrictions")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl create [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl create [options]
 
 Start a new crawl session.
 
@@ -242,7 +242,7 @@ func parseSeed(args []string) error {
 	fs.StringArrayVar(&flows, "flow", nil, "seed from proxy flow_id (can specify multiple times)")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl seed <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl seed <session_id> [options]
 
 Add seeds to a running crawl session.
 
@@ -276,7 +276,7 @@ func parseStatus(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl status <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl status <session_id> [options]
 
 Get status of a crawl session.
 
@@ -305,7 +305,7 @@ func parseSummary(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl summary <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl summary <session_id> [options]
 
 Get aggregated summary of a crawl session.
 
@@ -347,7 +347,7 @@ func parseList(args []string) error {
 	fs.IntVar(&offset, "offset", 0, "skip first N results")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl list <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl list <session_id> [options]
 
 List crawled URLs from a session.
 
@@ -378,7 +378,7 @@ func parseForms(args []string) error {
 	fs.IntVar(&limit, "limit", 100, "maximum results")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl forms <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl forms <session_id> [options]
 
 List forms discovered during crawling.
 
@@ -409,7 +409,7 @@ func parseErrors(args []string) error {
 	fs.IntVar(&limit, "limit", 100, "maximum results")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl errors <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl errors <session_id> [options]
 
 List errors encountered during crawling.
 
@@ -440,7 +440,7 @@ func parseSessions(args []string) error {
 	fs.IntVar(&limit, "limit", 0, "maximum sessions to return")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl sessions [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl sessions [options]
 
 List all crawl sessions.
 
@@ -464,7 +464,7 @@ func parseStop(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl stop <session_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl stop <session_id> [options]
 
 Stop a running crawl session.
 
@@ -493,7 +493,7 @@ func parseExport(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool crawl export <flow_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool crawl export <flow_id> [options]
 
 Export a crawled flow to an editable bundle on disk.
 

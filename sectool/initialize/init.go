@@ -48,7 +48,7 @@ func run(mode string, reset bool) error {
 		return fmt.Errorf("failed to create .sectool directory: %w", err)
 	}
 
-	cfg, err := loadOrCreateConfig(paths.ConfigPath)
+	cfg, err := config.LoadOrDefaultConfig(paths.ConfigPath)
 	if err != nil {
 		return err
 	}
@@ -111,18 +111,6 @@ func performReset(paths service.ServicePaths) error {
 	return nil
 }
 
-func loadOrCreateConfig(path string) (*config.Config, error) {
-	cfg, err := config.Load(path)
-	if err == nil {
-		return cfg, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Create new config with defaults
-	return config.DefaultConfig(config.Version), nil
-}
-
 // writeGuideIfNeeded writes the content to the output path.
 // If preserveGuides is true and the file exists, it skips writing.
 // Returns true if the file was written, false if skipped.
@@ -162,7 +150,7 @@ func printSuccess(outputPath string, written bool) {
 	fmt.Println("Follow agent action logs with: 'tail -F .sectool/service/log.txt'")
 }
 
-// templateData holds values for template rendering
+// templateData holds values for template rendering.
 type templateData struct {
 	SectoolCmd string
 }

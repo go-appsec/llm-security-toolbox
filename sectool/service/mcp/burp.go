@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -329,8 +330,7 @@ func (c *BurpClient) GetProxyHistoryRaw(ctx context.Context, count, offset int) 
 		})
 		if err != nil {
 			return fmt.Errorf("get_proxy_http_history failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		raw = extractTextContent(result.Content)
@@ -356,8 +356,7 @@ func (c *BurpClient) GetProxyHistoryRegex(ctx context.Context, regex string, cou
 		})
 		if err != nil {
 			return fmt.Errorf("get_proxy_http_history_regex failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		var parseErr error
@@ -379,6 +378,7 @@ func parseHistoryNDJSON(text string) ([]ProxyHistoryEntry, error) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 10*1024*1024)
 
+	var sb bytes.Buffer
 	var lineNum int
 	for scanner.Scan() {
 		lineNum++
@@ -390,10 +390,10 @@ func parseHistoryNDJSON(text string) ([]ProxyHistoryEntry, error) {
 		}
 
 		// Sanitize the JSON to handle Burp MCP bugs (truncation, invalid escapes)
-		sanitized := sanitizeBurpJSON(line)
+		sanitized := sanitizeBurpJSON(&sb, []byte(line))
 
 		var entry ProxyHistoryEntry
-		if err := json.Unmarshal([]byte(sanitized), &entry); err != nil {
+		if err := json.Unmarshal(sanitized, &entry); err != nil {
 			return entries, fmt.Errorf("failed to parse history entry at line %d: %w", lineNum, err)
 		}
 		entries = append(entries, entry)
@@ -409,27 +409,28 @@ func parseHistoryNDJSON(text string) ([]ProxyHistoryEntry, error) {
 // sanitizeBurpJSON fixes known Burp MCP bugs in JSON output:
 // 1. Invalid escape sequences from binary/path data (e.g., \. or \u00XX with non-hex)
 // 2. Truncated JSON that doesn't close properly
-func sanitizeBurpJSON(line string) string {
+func sanitizeBurpJSON(bb *bytes.Buffer, line []byte) []byte {
 	// First fix invalid escape sequences
-	line = fixInvalidEscapes(line)
+	line = fixInvalidEscapes(bb, line)
 
 	// Then repair truncation if needed
-	line = repairTruncatedJSON(line)
+	line = repairTruncatedJSON(bb, line)
 
 	return line
 }
 
+var jsonEscapeBytes = []byte("\\")
+
 // fixInvalidEscapes fixes malformed escape sequences in JSON strings.
 // Burp MCP can embed raw binary or path-like data that creates invalid escapes.
 // Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
-func fixInvalidEscapes(s string) string {
-	// Fast path: no backslashes to process
-	if !strings.Contains(s, "\\") {
-		return s
+func fixInvalidEscapes(sb *bytes.Buffer, s []byte) []byte {
+	if !bytes.Contains(s, jsonEscapeBytes) {
+		return s // Fast path: no backslashes to process
 	}
 
-	var result strings.Builder
-	result.Grow(len(s))
+	sb.Reset()
+	sb.Grow(len(s))
 	var i int
 	for i < len(s) {
 		if s[i] == '\\' && i+1 < len(s) {
@@ -437,36 +438,36 @@ func fixInvalidEscapes(s string) string {
 			switch next {
 			case '\\', '"', '/', 'b', 'f', 'n', 'r', 't':
 				// Valid simple escape - copy as-is
-				result.WriteByte(s[i])
-				result.WriteByte(next)
+				sb.WriteByte(s[i])
+				sb.WriteByte(next)
 				i += 2
 			case 'u':
 				// Unicode escape - validate hex digits
 				if i+5 < len(s) && isValidHexEscape(s[i+2:i+6]) {
 					// Valid unicode escape, copy as-is
-					result.WriteString(s[i : i+6])
+					sb.Write(s[i : i+6])
 					i += 6
 				} else {
 					// Invalid unicode escape - escape the backslash
-					result.WriteString("\\\\u")
+					sb.WriteString("\\\\u")
 					i += 2
 				}
 			default:
 				// Invalid escape sequence - escape the backslash to make it literal
-				result.WriteString("\\\\")
-				result.WriteByte(next)
+				sb.WriteString("\\\\")
+				sb.WriteByte(next)
 				i += 2
 			}
 			continue
 		}
-		result.WriteByte(s[i])
+		sb.WriteByte(s[i])
 		i++
 	}
 
-	return result.String()
+	return sb.Bytes()
 }
 
-func isValidHexEscape(s string) bool {
+func isValidHexEscape(s []byte) bool {
 	if len(s) != 4 {
 		return false
 	}
@@ -481,11 +482,14 @@ func isValidHexEscape(s string) bool {
 	return true
 }
 
+var jsonCloseTagBytes = []byte("}")
+
 // repairTruncatedJSON closes JSON that was truncated mid-stream by Burp MCP.
 // Expected format: {"request":"...","response":"...","notes":"..."}
-func repairTruncatedJSON(s string) string {
+func repairTruncatedJSON(sb *bytes.Buffer, s []byte) []byte {
 	// Check if JSON is properly closed
-	if strings.HasSuffix(s, "}") {
+	s = bytes.TrimSpace(s)
+	if bytes.HasSuffix(s, jsonCloseTagBytes) {
 		return s
 	}
 
@@ -493,32 +497,32 @@ func repairTruncatedJSON(s string) string {
 	// The structure is always: {"request":"...","response":"...","notes":"..."}
 
 	// Check if we're inside a string value (odd number of unescaped quotes after last field marker)
-	// Simple heuristic: if it doesn't end with "} or ,"} or similar, we're mid-value
+	// Simple heuristic: if it doesn't end with "}" or ,"}" or similar, we're mid-value
 
 	// Find the last field we were in
-	lastRequest := strings.LastIndex(s, `"request":"`)
-	lastResponse := strings.LastIndex(s, `"response":"`)
-	lastNotes := strings.LastIndex(s, `"notes":"`)
+	lastRequest := bytes.LastIndex(s, []byte(`"request":"`))
+	lastResponse := bytes.LastIndex(s, []byte(`"response":"`))
+	lastNotes := bytes.LastIndex(s, []byte(`"notes":"`))
 
-	var result strings.Builder
-	result.WriteString(s)
+	sb.Reset()
+	sb.Write(s)
 
 	// Determine which field we're in based on last marker position
 	if lastNotes > lastResponse && lastNotes > lastRequest {
 		// We're in notes field - close it
-		result.WriteString(`"}`)
+		sb.WriteString(`"}`)
 	} else if lastResponse > lastRequest {
 		// We're in response field - close it and add empty notes
-		result.WriteString(`","notes":""}`)
+		sb.WriteString(`","notes":""}`)
 	} else if lastRequest >= 0 {
 		// We're in request field - close it and add empty response/notes
-		result.WriteString(`","response":"","notes":""}`)
+		sb.WriteString(`","response":"","notes":""}`)
 	} else {
 		// Malformed from the start, just try to close
-		result.WriteString(`"}`)
+		sb.WriteString(`"}`)
 	}
 
-	return result.String()
+	return sb.Bytes()
 }
 
 // SendHTTP1Request sends an HTTP/1.1 request through Burp and returns the response.
@@ -539,8 +543,7 @@ func (c *BurpClient) SendHTTP1Request(ctx context.Context, params SendRequestPar
 		})
 		if err != nil {
 			return fmt.Errorf("send_http1_request failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		response = extractTextContent(result.Content)
@@ -570,8 +573,7 @@ func (c *BurpClient) CreateRepeaterTab(ctx context.Context, params RepeaterTabPa
 		})
 		if err != nil {
 			return fmt.Errorf("create_repeater_tab failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		return nil
@@ -591,8 +593,7 @@ func (c *BurpClient) SetInterceptState(ctx context.Context, intercepting bool) e
 		})
 		if err != nil {
 			return fmt.Errorf("set_proxy_intercept_state failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		return nil
@@ -625,8 +626,7 @@ func (c *BurpClient) SendHTTP2Request(ctx context.Context, params SendHTTP2Reque
 		})
 		if err != nil {
 			return fmt.Errorf("send_http2_request failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		response = extractTextContent(result.Content)
@@ -656,8 +656,7 @@ func (c *BurpClient) SendToIntruder(ctx context.Context, params IntruderParams) 
 		})
 		if err != nil {
 			return fmt.Errorf("send_to_intruder failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		return nil
@@ -688,8 +687,7 @@ func (c *BurpClient) GetProxyWebsocketHistoryRaw(ctx context.Context, count, off
 		})
 		if err != nil {
 			return fmt.Errorf("get_proxy_websocket_history failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		raw = extractTextContent(result.Content)
@@ -714,8 +712,7 @@ func (c *BurpClient) GetProxyWebsocketHistoryRegex(ctx context.Context, regex st
 		})
 		if err != nil {
 			return fmt.Errorf("get_proxy_websocket_history_regex failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		var parseErr error
@@ -774,8 +771,7 @@ func (c *BurpClient) SetTaskExecutionEngineState(ctx context.Context, running bo
 		})
 		if err != nil {
 			return fmt.Errorf("set_task_execution_engine_state failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		return nil
@@ -794,8 +790,7 @@ func (c *BurpClient) GetActiveEditorContents(ctx context.Context) (string, error
 		})
 		if err != nil {
 			return fmt.Errorf("get_active_editor_contents failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		contents = extractTextContent(result.Content)
@@ -817,8 +812,7 @@ func (c *BurpClient) SetActiveEditorContents(ctx context.Context, text string) e
 		})
 		if err != nil {
 			return fmt.Errorf("set_active_editor_contents failed: %w", err)
-		}
-		if result.IsError {
+		} else if result.IsError {
 			return fmt.Errorf("MCP error: %s", extractTextContent(result.Content))
 		}
 		return nil

@@ -153,7 +153,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// Setup OAST (nothing connected till used)
 	s.oastBackend = NewInteractshBackend()
 	// Setup Crawler backend
-	s.crawlerBackend = NewCollyBackend(s.cfg.GetCrawler(), s.crawlFlowStore, s.flowStore, s.httpBackend)
+	s.crawlerBackend = NewCollyBackend(s.cfg.Crawler, s.crawlFlowStore, s.flowStore, s.httpBackend)
 	log.Printf("service ready, listening on %s", s.paths.SocketPath)
 
 	// Start MCP SSE server if enabled
@@ -441,14 +441,8 @@ func (s *Server) RequestShutdown() {
 // loadOrCreateConfig loads config from disk or creates default if missing.
 // Command-line flags override config file values.
 func (s *Server) loadOrCreateConfig() error {
-	cfg, err := config.Load(s.paths.ConfigPath)
-	if os.IsNotExist(err) {
-		cfg = config.DefaultConfig(config.Version)
-		if err := cfg.Save(s.paths.ConfigPath); err != nil {
-			return fmt.Errorf("failed to save default config: %w", err)
-		}
-		log.Printf("created default config at %s", s.paths.ConfigPath)
-	} else if err != nil {
+	cfg, err := config.LoadOrDefaultConfig(s.paths.ConfigPath)
+	if err != nil {
 		return err
 	}
 
@@ -460,19 +454,11 @@ func (s *Server) loadOrCreateConfig() error {
 	return nil
 }
 
-// burpMCPURL returns the effective Burp MCP URL from config.
-func (s *Server) burpMCPURL() string {
-	if s.cfg != nil {
-		return s.cfg.BurpMCPURL
-	}
-	return config.DefaultBurpMCPURL
-}
-
 // connectBurpMCP establishes the connection to Burp MCP.
 func (s *Server) connectBurpMCP(ctx context.Context) error {
 	// TODO - FUTURE - replace this with a HttpBackend selection
 
-	burpBackend := NewBurpBackend(s.burpMCPURL())
+	burpBackend := NewBurpBackend(s.cfg.BurpMCPURL)
 	if err := burpBackend.Connect(ctx); err != nil {
 		return err
 	}
@@ -485,25 +471,25 @@ func (s *Server) printMCPConfig() {
 	addr := s.mcpServer.Addr()
 	sseURL := fmt.Sprintf("http://%s/sse", addr)
 
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "================================================================================")
-	fmt.Fprintf(os.Stderr, "MCP SSE Endpoint: %s\n", sseURL)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Claude Code:")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "  claude mcp add sectool --transport sse %s\n", sseURL)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Add to your Codex MCP configuration:")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  {")
-	fmt.Fprintln(os.Stderr, "    \"mcpServers\": {")
-	fmt.Fprintln(os.Stderr, "      \"sectool\": {")
-	fmt.Fprintln(os.Stderr, "        \"type\": \"sse\",")
-	fmt.Fprintf(os.Stderr, "        \"url\": \"%s\"\n", sseURL)
-	fmt.Fprintln(os.Stderr, "      }")
-	fmt.Fprintln(os.Stderr, "    }")
-	fmt.Fprintln(os.Stderr, "  }")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "================================================================================")
-	fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "================================================================================")
+	_, _ = fmt.Fprintf(os.Stderr, "MCP SSE Endpoint: %s\n", sseURL)
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Claude Code:")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintf(os.Stderr, "  claude mcp add sectool --transport sse %s\n", sseURL)
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "Add to your Codex MCP configuration:")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "  {")
+	_, _ = fmt.Fprintln(os.Stderr, "    \"mcpServers\": {")
+	_, _ = fmt.Fprintln(os.Stderr, "      \"sectool\": {")
+	_, _ = fmt.Fprintln(os.Stderr, "        \"type\": \"sse\",")
+	_, _ = fmt.Fprintf(os.Stderr, "        \"url\": \"%s\"\n", sseURL)
+	_, _ = fmt.Fprintln(os.Stderr, "      }")
+	_, _ = fmt.Fprintln(os.Stderr, "    }")
+	_, _ = fmt.Fprintln(os.Stderr, "  }")
+	_, _ = fmt.Fprintln(os.Stderr, "")
+	_, _ = fmt.Fprintln(os.Stderr, "================================================================================")
+	_, _ = fmt.Fprintln(os.Stderr, "")
 }

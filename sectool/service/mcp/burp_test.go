@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -70,14 +71,17 @@ func TestSanitizeBurpJSON(t *testing.T) {
 		},
 	}
 
+	var bb bytes.Buffer // reuse to validate reset before used
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, sanitizeBurpJSON(tt.input))
+			assert.Equal(t, []byte(tt.want), sanitizeBurpJSON(&bb, []byte(tt.input)))
 		})
 	}
 }
 
 func TestFixInvalidEscapes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input string
@@ -195,14 +199,17 @@ func TestFixInvalidEscapes(t *testing.T) {
 		},
 	}
 
+	var bb bytes.Buffer // reuse to validate reset before used
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, fixInvalidEscapes(tt.input))
+			assert.Equal(t, []byte(tt.want), fixInvalidEscapes(&bb, []byte(tt.input)))
 		})
 	}
 }
 
 func TestParseHistoryNDJSON(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -266,6 +273,8 @@ Reached end of items`,
 }
 
 func TestIsValidHexEscape(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  bool
@@ -283,12 +292,14 @@ func TestIsValidHexEscape(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.want, isValidHexEscape(tt.input))
+			assert.Equal(t, tt.want, isValidHexEscape([]byte(tt.input)))
 		})
 	}
 }
 
 func TestRepairTruncatedJSON(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input string
@@ -326,9 +337,10 @@ func TestRepairTruncatedJSON(t *testing.T) {
 		},
 	}
 
+	var bb bytes.Buffer // reuse to validate reset before used
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, repairTruncatedJSON(tt.input))
+			assert.Equal(t, []byte(tt.want), repairTruncatedJSON(&bb, []byte(tt.input)))
 		})
 	}
 }

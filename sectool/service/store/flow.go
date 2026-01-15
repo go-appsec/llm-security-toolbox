@@ -82,12 +82,7 @@ func (s *FlowStore) LookupByHash(hash string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	flowIDs := s.byHash[hash]
-	if len(flowIDs) == 0 {
-		return nil
-	}
-
-	return slices.Clone(flowIDs)
+	return slices.Clone(s.byHash[hash])
 }
 
 // LookupByOffset finds the flow_id for a given offset.

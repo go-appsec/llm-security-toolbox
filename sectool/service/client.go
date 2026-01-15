@@ -63,6 +63,23 @@ func NewClient(workDir string, opts ...ClientOption) *Client {
 	return c
 }
 
+// ConnectedClient creates a client and ensures the service is running.
+// This is a convenience wrapper for the common pattern of getting the working
+// directory, creating a client, and starting the service if needed.
+func ConnectedClient(ctx context.Context, timeout time.Duration) (*Client, error) {
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	client := NewClient(workDir, WithTimeout(timeout))
+	if err := client.EnsureService(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+	}
+
+	return client, nil
+}
+
 // LogPath returns the relative path to the service log file for display.
 func (c *Client) LogPath() string {
 	return c.paths.RelPath(c.paths.LogFile)

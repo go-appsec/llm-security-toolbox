@@ -26,12 +26,11 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 		return errors.New("cannot read both file and body from stdin")
 	}
 
+	// Handle stdin by writing to temp files
 	workDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
-
-	// Handle stdin by writing to temp files
 	requestsDir := filepath.Join(workDir, ".sectool", "requests")
 	if file == "-" || body == "-" {
 		if err := os.MkdirAll(requestsDir, 0700); err != nil {
@@ -65,9 +64,9 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 		body = tmpPath
 	}
 
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+	client, err := service.ConnectedClient(ctx, timeout)
+	if err != nil {
+		return err
 	}
 
 	// Extract base name for backward compat with full paths
@@ -100,12 +99,11 @@ func send(timeout time.Duration, flow, bundle, file, body, target string, header
 	resp, err := client.ReplaySend(ctx, req)
 	if err != nil {
 		if bundle != "" {
-			fmt.Fprintln(os.Stderr, "\nTip: Consider using `sectool replay send --flow <flow_id>` with modification flags as a simpler alternative to editing bundle files directly.")
+			_, _ = fmt.Fprintln(os.Stderr, "\nTip: Consider using `sectool replay send --flow <flow_id>` with modification flags as a simpler alternative to editing bundle files directly.")
 		}
 		return fmt.Errorf("replay send failed: %w", err)
 	}
 
-	// Output result as markdown
 	fmt.Printf("## Replay Result\n\n")
 	fmt.Printf("Replay ID: `%s`\n", resp.ReplayID)
 	fmt.Printf("Duration: %s\n\n", resp.Duration)
@@ -129,14 +127,9 @@ func get(timeout time.Duration, replayID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.ReplayGet(ctx, &service.ReplayGetRequest{
@@ -146,7 +139,6 @@ func get(timeout time.Duration, replayID string) error {
 		return fmt.Errorf("replay get failed: %w", err)
 	}
 
-	// Output result as markdown
 	fmt.Printf("## Replay Details\n\n")
 	fmt.Printf("Replay ID: `%s`\n", resp.ReplayID)
 	fmt.Printf("Duration: %s\n", resp.Duration)
@@ -173,13 +165,9 @@ func create(timeout time.Duration, urlArg, method string, headers []string, body
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
 	// Read body if specified
 	var body []byte
+	var err error
 	if bodyPath != "" {
 		if bodyPath == "-" {
 			body, err = io.ReadAll(os.Stdin)
@@ -204,9 +192,9 @@ func create(timeout time.Duration, urlArg, method string, headers []string, body
 		headerMap[strings.TrimSpace(name)] = strings.TrimSpace(value)
 	}
 
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+	client, err := service.ConnectedClient(ctx, timeout)
+	if err != nil {
+		return err
 	}
 
 	resp, err := client.ReplayCreate(ctx, &service.ReplayCreateRequest{
@@ -221,8 +209,10 @@ func create(timeout time.Duration, urlArg, method string, headers []string, body
 
 	// Convert to relative path for cleaner output
 	bundlePath := resp.BundlePath
-	if rel, err := filepath.Rel(workDir, resp.BundlePath); err == nil {
-		bundlePath = rel
+	if workDir, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(workDir, resp.BundlePath); err == nil {
+			bundlePath = rel
+		}
 	}
 
 	// Output result

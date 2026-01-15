@@ -35,7 +35,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool replay <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool replay <command> [options]
 
 Replay HTTP requests through Burp Suite proxy.
 
@@ -160,7 +160,7 @@ func parseSend(args []string) error {
 	fs.BoolVar(&force, "force", false, "send request even if validation fails")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool replay send [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool replay send [options]
 
 Send a request through the HTTP backend.
 
@@ -263,7 +263,7 @@ func parseGet(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool replay get <replay_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool replay get <replay_id> [options]
 
 Get details of a previous replay.
 
@@ -297,7 +297,7 @@ func parseCreate(args []string) error {
 	fs.StringVar(&bodyPath, "body", "", "path to body file (- for stdin)")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool replay create <url> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool replay create <url> [options]
 
 Create a request bundle from scratch (without capturing traffic first).
 
@@ -307,7 +307,7 @@ Arguments:
 Options:
 `)
 		fs.PrintDefaults()
-		fmt.Fprint(os.Stderr, `
+		_, _ = fmt.Fprint(os.Stderr, `
 Examples:
   sectool replay create https://api.example.com/users
   sectool replay create example.com/api/v1/data --method POST --body payload.json

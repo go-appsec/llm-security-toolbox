@@ -1,6 +1,7 @@
 package store
 
 import (
+	"maps"
 	"sync"
 )
 
@@ -68,12 +69,9 @@ func (s *CrawlFlowStore) Delete(flowID string) {
 func (s *CrawlFlowStore) RemoveSession(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	for id, entry := range s.byID {
-		if entry.SessionID == sessionID {
-			delete(s.byID, id)
-		}
-	}
+	maps.DeleteFunc(s.byID, func(_ string, entry *CrawlFlowEntry) bool {
+		return entry.SessionID == sessionID
+	})
 }
 
 // Count returns the number of flows in the store.

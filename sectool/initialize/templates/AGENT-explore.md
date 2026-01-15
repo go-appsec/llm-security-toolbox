@@ -85,7 +85,7 @@ Crawler flows can be replayed just like proxy flows using `{{.SectoolCmd}} repla
 ### Testing for SSRF
 
 1. Create OAST domain: `{{.SectoolCmd}} oast create`
-2. Export a target request (those containing URLs in headers or body are excellent targets, or fields which are ambigious in their use)
+2. Export a target request (those containing URLs in headers or body are excellent targets, or fields which are ambiguous in their use)
 3. Replace or add field with your OAST domain
 4. Replay the request
 5. Poll for interactions: `{{.SectoolCmd}} oast poll <oast_id> --wait 30s`

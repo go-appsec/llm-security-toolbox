@@ -14,14 +14,9 @@ func export(timeout time.Duration, flowID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.FlowExport(ctx, &service.FlowExportRequest{
@@ -33,8 +28,10 @@ func export(timeout time.Duration, flowID string) error {
 
 	// Convert to relative path for cleaner output
 	bundlePath := resp.BundlePath
-	if rel, err := filepath.Rel(workDir, resp.BundlePath); err == nil {
-		bundlePath = rel
+	if workDir, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(workDir, resp.BundlePath); err == nil {
+			bundlePath = rel
+		}
 	}
 
 	// Output result

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -46,6 +47,47 @@ func normalizePath(path string) string {
 	}
 
 	return strings.Join(segments, "/") + query
+}
+
+// maxPathLength is the maximum path length for display.
+const maxPathLength = 80
+
+// aggregateByTuple groups entries by (host, path, method, status).
+// The extract function maps each entry to its aggregate key components.
+func aggregateByTuple[T any](entries []T, extract func(T) (host, path, method string, status int)) []AggregateEntry {
+	type aggregateKey struct {
+		Host   string
+		Path   string
+		Method string
+		Status int
+	}
+	counts := make(map[aggregateKey]int)
+	for _, e := range entries {
+		host, path, method, status := extract(e)
+		key := aggregateKey{
+			Host:   host,
+			Path:   normalizePath(path),
+			Method: method,
+			Status: status,
+		}
+		counts[key]++
+	}
+
+	result := make([]AggregateEntry, 0, len(counts))
+	for key, count := range counts {
+		result = append(result, AggregateEntry{
+			Host:   key.Host,
+			Path:   truncateString(key.Path, maxPathLength),
+			Method: key.Method,
+			Status: key.Status,
+			Count:  count,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
+	})
+
+	return result
 }
 
 const (

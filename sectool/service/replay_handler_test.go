@@ -472,7 +472,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=GET /api/test HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status": "ok"}, messageAnnotations=Annotations{}}`)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{BundleID: bundleID})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{BundleID: bundleID})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -498,7 +498,7 @@ func TestHandleReplaySend(t *testing.T) {
 		)
 
 		// First list to get a flow ID
-		w := doRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+		w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 		require.Equal(t, http.StatusOK, w.Code)
 
 		var listAPIResp APIResponse
@@ -512,7 +512,7 @@ func TestHandleReplaySend(t *testing.T) {
 		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=GET /api/test HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nreplayed, messageAnnotations=Annotations{}}`)
 
 		// Replay from flow ID
-		w = doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: flowID})
+		w = doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: flowID})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -543,7 +543,7 @@ func TestHandleReplaySend(t *testing.T) {
 			`HttpRequestResponse{httpRequest=modified, httpResponse=HTTP/1.1 200 OK\r\n\r\nok, messageAnnotations=Annotations{}}`,
 		)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
 			BundleID:      bundleID,
 			AddHeaders:    []string{"Authorization: Bearer token"},
 			RemoveHeaders: []string{"Cookie"},
@@ -566,7 +566,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=POST /api HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nok, messageAnnotations=Annotations{}}`)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FilePath: tmpFile})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FilePath: tmpFile})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -594,7 +594,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=POST /api HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nok, messageAnnotations=Annotations{}}`)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
 			FilePath: headersFile,
 			BodyPath: bodyFile,
 		})
@@ -613,7 +613,7 @@ func TestHandleReplaySend(t *testing.T) {
 	t.Run("no_input", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -626,7 +626,7 @@ func TestHandleReplaySend(t *testing.T) {
 	t.Run("id_not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "nonexistent"})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "nonexistent"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -656,7 +656,7 @@ func TestHandleReplaySend(t *testing.T) {
 
 		mockMCP.SetSendResponse(`HttpRequestResponse{httpRequest=GET /crawled HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nreplayed crawl, messageAnnotations=Annotations{}}`)
 
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "crawl123"})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: "crawl123"})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -674,7 +674,7 @@ func TestHandleReplaySend(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
 		// Try path traversal via bundle ID
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{BundleID: "../etc/passwd"})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{BundleID: "../etc/passwd"})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -689,7 +689,7 @@ func TestHandleReplaySend(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
 		// Try path traversal via file path
-		w := doRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FilePath: "../../../etc/passwd"})
+		w := doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FilePath: "../../../etc/passwd"})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -707,7 +707,7 @@ func TestHandleReplayGet(t *testing.T) {
 	t.Run("not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/get", ReplayGetRequest{ReplayID: "test123"})
+		w := doTestRequest(t, srv, "POST", "/replay/get", ReplayGetRequest{ReplayID: "test123"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -724,7 +724,7 @@ func TestHandleReplayCreate(t *testing.T) {
 	t.Run("simple_get", func(t *testing.T) {
 		srv, _, workDir := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+		w := doTestRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
 			URL: "https://example.com/api/users",
 		})
 
@@ -757,7 +757,7 @@ func TestHandleReplayCreate(t *testing.T) {
 	t.Run("post_with_body_and_headers", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+		w := doTestRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
 			URL:    "https://api.example.com/users",
 			Method: "POST",
 			Headers: map[string]string{
@@ -791,7 +791,7 @@ func TestHandleReplayCreate(t *testing.T) {
 	t.Run("url_without_scheme", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
+		w := doTestRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{
 			URL: "example.com/api",
 		})
 
@@ -813,7 +813,7 @@ func TestHandleReplayCreate(t *testing.T) {
 	t.Run("missing_url", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{})
+		w := doTestRequest(t, srv, "POST", "/replay/create", ReplayCreateRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 

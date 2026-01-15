@@ -16,7 +16,7 @@ func TestHandleOastPoll(t *testing.T) {
 	t.Run("missing_oast_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{})
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -30,7 +30,7 @@ func TestHandleOastPoll(t *testing.T) {
 	t.Run("session_not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{OastID: "nonexistent"})
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{OastID: "nonexistent"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -43,7 +43,7 @@ func TestHandleOastPoll(t *testing.T) {
 	t.Run("invalid_wait_duration", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "test",
 			Wait:   "not-a-duration",
 		})
@@ -86,7 +86,7 @@ func TestHandleOastPoll(t *testing.T) {
 
 		// Request with wait > 120s - should be capped but should succeed
 		// Since there are already events, it returns immediately
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testcap",
 			Wait:   "300s",
 		})
@@ -138,7 +138,7 @@ func TestHandleOastPoll(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testfmt",
 		})
 
@@ -185,7 +185,7 @@ func TestHandleOastPoll(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testdrop",
 		})
 
@@ -227,7 +227,7 @@ func TestHandleOastPoll(t *testing.T) {
 		}()
 
 		// Poll by domain instead of ID
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "domain.oast.fun",
 		})
 
@@ -274,7 +274,7 @@ func TestHandleOastPoll(t *testing.T) {
 		}()
 
 		// Poll with limit
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testlimit",
 			Limit:  2,
 		})
@@ -323,7 +323,7 @@ func TestHandleOastPoll(t *testing.T) {
 		}()
 
 		// First poll with limit 2
-		w := doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testsincelimit",
 			Limit:  2,
 		})
@@ -337,7 +337,7 @@ func TestHandleOastPoll(t *testing.T) {
 		assert.Len(t, pollResp.Events, 2)
 
 		// Second poll with --since last should return remaining events
-		w = doRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
+		w = doTestRequest(t, srv, "POST", "/oast/poll", OastPollRequest{
 			OastID: "testsincelimit",
 			Since:  "last",
 		})
@@ -359,7 +359,7 @@ func TestHandleOastGet(t *testing.T) {
 	t.Run("missing_oast_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{})
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -373,7 +373,7 @@ func TestHandleOastGet(t *testing.T) {
 	t.Run("missing_event_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{OastID: "test123"})
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{OastID: "test123"})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -387,7 +387,7 @@ func TestHandleOastGet(t *testing.T) {
 	t.Run("session_not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{
 			OastID:  "nonexistent",
 			EventID: "event1",
 		})
@@ -427,7 +427,7 @@ func TestHandleOastGet(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{
 			OastID:  "testget",
 			EventID: "nonexistent",
 		})
@@ -480,7 +480,7 @@ func TestHandleOastGet(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{
 			OastID:  "testfull",
 			EventID: "evt123",
 		})
@@ -530,7 +530,7 @@ func TestHandleOastGet(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/get", OastGetRequest{
+		w := doTestRequest(t, srv, "POST", "/oast/get", OastGetRequest{
 			OastID:  "domain.oast.fun",
 			EventID: "e1",
 		})
@@ -554,7 +554,7 @@ func TestHandleOastList(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/list", nil)
+		w := doTestRequest(t, srv, "POST", "/oast/list", nil)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -604,7 +604,7 @@ func TestHandleOastList(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/list", nil)
+		w := doTestRequest(t, srv, "POST", "/oast/list", nil)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -672,7 +672,7 @@ func TestHandleOastList(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/list", OastListRequest{Limit: 2})
+		w := doTestRequest(t, srv, "POST", "/oast/list", OastListRequest{Limit: 2})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -726,7 +726,7 @@ func TestHandleOastList(t *testing.T) {
 			backend.mu.Unlock()
 		}()
 
-		w := doRequest(t, srv, "POST", "/oast/list", nil)
+		w := doTestRequest(t, srv, "POST", "/oast/list", nil)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -749,7 +749,7 @@ func TestHandleOastDelete(t *testing.T) {
 	t.Run("missing_oast_id", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{})
+		w := doTestRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{})
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -763,7 +763,7 @@ func TestHandleOastDelete(t *testing.T) {
 	t.Run("session_not_found", func(t *testing.T) {
 		srv, _, _ := testServerWithMCP(t)
 
-		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "nonexistent"})
+		w := doTestRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "nonexistent"})
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -791,7 +791,7 @@ func TestHandleOastDelete(t *testing.T) {
 		backend.byID["testdel"] = "del.oast.fun"
 		backend.mu.Unlock()
 
-		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "testdel"})
+		w := doTestRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "testdel"})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
@@ -825,7 +825,7 @@ func TestHandleOastDelete(t *testing.T) {
 		backend.mu.Unlock()
 
 		// Delete by domain
-		w := doRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "deldomain.oast.fun"})
+		w := doTestRequest(t, srv, "POST", "/oast/delete", OastDeleteRequest{OastID: "deldomain.oast.fun"})
 
 		assert.Equal(t, http.StatusOK, w.Code)
 

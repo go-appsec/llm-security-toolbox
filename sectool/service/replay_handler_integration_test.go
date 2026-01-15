@@ -17,7 +17,7 @@ func TestBurp_ReplayFromFlowID(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	// Get a flow ID
-	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+	w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var listAPIResp APIResponse
@@ -33,7 +33,7 @@ func TestBurp_ReplayFromFlowID(t *testing.T) {
 	flowID := listResp.Flows[0].FlowID
 
 	// Replay directly from flow ID
-	w = doBurpRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: flowID})
+	w = doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{FlowID: flowID})
 
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -53,7 +53,7 @@ func TestBurp_ReplayWithModifications(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	// Get a flow ID
-	w := doBurpRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
+	w := doTestRequest(t, srv, "POST", "/proxy/list", ProxyListRequest{Method: "GET"})
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var listAPIResp APIResponse
@@ -69,7 +69,7 @@ func TestBurp_ReplayWithModifications(t *testing.T) {
 	flowID := listResp.Flows[0].FlowID
 
 	// Replay with header modifications
-	w = doBurpRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
+	w = doTestRequest(t, srv, "POST", "/replay/send", ReplaySendRequest{
 		FlowID:        flowID,
 		AddHeaders:    []string{"X-Test-Header: sectool-integration-test"},
 		RemoveHeaders: []string{"Accept-Encoding"}, // Often present, safe to remove

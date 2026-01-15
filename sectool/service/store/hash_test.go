@@ -111,7 +111,7 @@ func TestComputeFlowHash(t *testing.T) {
 		hash1 := ComputeFlowHash("GET", "example.com", "/api", headers, nil)
 		hash2 := ComputeFlowHash("GET", "example.com", "/api", headers, []byte{})
 
-		// Both should be the same since empty body is treated as no body
+		// Both should be the same since empty body is treated as empty
 		assert.Equal(t, hash1, hash2)
 	})
 }

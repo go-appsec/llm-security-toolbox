@@ -35,7 +35,7 @@ func computeHash(method, host, path string, headerLines []string, body []byte) s
 	h.Write([]byte(strings.ToUpper(method)))
 	h.Write(separator)
 
-	h.Write([]byte(strings.ToLower(host))) // Host (normalized to lowercase)
+	h.Write([]byte(strings.ToLower(host)))
 	h.Write(separator)
 
 	h.Write([]byte(path)) // Path (as-is, preserving case for path sensitivity)

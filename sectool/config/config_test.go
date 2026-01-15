@@ -76,85 +76,44 @@ func TestLoadInvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCrawlerDefaults(t *testing.T) {
+func TestLoadOrDefaultConfig(t *testing.T) {
 	t.Parallel()
 
-	defaults := CrawlerDefaults()
+	t.Run("creates_new_config", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "config.json")
 
-	assert.Equal(t, 2, defaults.MaxConcurrentSessions)
-	assert.Equal(t, 1048576, defaults.MaxResponseBodyBytes)
-	assert.NotNil(t, defaults.IncludeSubdomains)
-	assert.True(t, *defaults.IncludeSubdomains)
-	assert.Contains(t, defaults.DefaultDisallowedPaths, "*logout*")
-	assert.Contains(t, defaults.DefaultDisallowedPaths, "*delete*")
-	assert.Equal(t, 200, defaults.DefaultDelayMS)
-	assert.Equal(t, 2, defaults.DefaultParallelism)
-	assert.Equal(t, 10, defaults.DefaultMaxDepth)
-	assert.Equal(t, 1000, defaults.DefaultMaxRequests)
-	assert.NotNil(t, defaults.DefaultExtractForms)
-	assert.True(t, *defaults.DefaultExtractForms)
-	assert.NotNil(t, defaults.DefaultSubmitForms)
-	assert.False(t, *defaults.DefaultSubmitForms)
-}
-
-func TestGetCrawler(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil_returns_defaults", func(t *testing.T) {
-		cfg := &Config{}
-		crawler := cfg.GetCrawler()
-
-		defaults := CrawlerDefaults()
-		assert.Equal(t, defaults.MaxConcurrentSessions, crawler.MaxConcurrentSessions)
-		assert.Equal(t, defaults.MaxResponseBodyBytes, crawler.MaxResponseBodyBytes)
-		assert.Equal(t, defaults.DefaultDelayMS, crawler.DefaultDelayMS)
+		cfg, err := LoadOrDefaultConfig(path)
+		require.NoError(t, err)
+		assert.Equal(t, Version, cfg.Version)
+		assert.Equal(t, DefaultBurpMCPURL, cfg.BurpMCPURL)
 	})
 
-	t.Run("partial_config_merges_defaults", func(t *testing.T) {
-		cfg := &Config{
-			Crawler: &CrawlerConfig{
-				MaxConcurrentSessions: 5,
-				DefaultDelayMS:        500,
-			},
-		}
-		crawler := cfg.GetCrawler()
+	t.Run("loads_existing_config", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "config.json")
 
-		assert.Equal(t, 5, crawler.MaxConcurrentSessions)
-		assert.Equal(t, 500, crawler.DefaultDelayMS)
-		// Should use defaults for unset fields
-		assert.Equal(t, 1048576, crawler.MaxResponseBodyBytes)
-		assert.Equal(t, 2, crawler.DefaultParallelism)
-		assert.Equal(t, 10, crawler.DefaultMaxDepth)
+		// Create an existing config
+		existing := &Config{
+			Version:        "0.0.1",
+			BurpMCPURL:     "http://custom:1234/sse",
+			PreserveGuides: true,
+		}
+		require.NoError(t, existing.Save(path))
+
+		cfg, err := LoadOrDefaultConfig(path)
+		require.NoError(t, err)
+		assert.Equal(t, "http://custom:1234/sse", cfg.BurpMCPURL)
+		assert.True(t, cfg.PreserveGuides)
 	})
 
-	t.Run("full_config_no_defaults", func(t *testing.T) {
-		f := false
-		t2 := true
-		cfg := &Config{
-			Crawler: &CrawlerConfig{
-				MaxConcurrentSessions:  3,
-				MaxResponseBodyBytes:   512000,
-				IncludeSubdomains:      &f,
-				DefaultDisallowedPaths: []string{"/admin/*"},
-				DefaultDelayMS:         100,
-				DefaultParallelism:     4,
-				DefaultMaxDepth:        5,
-				DefaultMaxRequests:     500,
-				DefaultExtractForms:    &t2,
-				DefaultSubmitForms:     &t2,
-			},
-		}
-		crawler := cfg.GetCrawler()
+	t.Run("error_on_invalid_JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "config.json")
 
-		assert.Equal(t, 3, crawler.MaxConcurrentSessions)
-		assert.Equal(t, 512000, crawler.MaxResponseBodyBytes)
-		assert.False(t, *crawler.IncludeSubdomains)
-		assert.Equal(t, []string{"/admin/*"}, crawler.DefaultDisallowedPaths)
-		assert.Equal(t, 100, crawler.DefaultDelayMS)
-		assert.Equal(t, 4, crawler.DefaultParallelism)
-		assert.Equal(t, 5, crawler.DefaultMaxDepth)
-		assert.Equal(t, 500, crawler.DefaultMaxRequests)
-		assert.True(t, *crawler.DefaultExtractForms)
-		assert.True(t, *crawler.DefaultSubmitForms)
+		require.NoError(t, os.WriteFile(path, []byte("invalid"), 0644))
+
+		_, err := LoadOrDefaultConfig(path)
+		assert.Error(t, err)
 	})
 }

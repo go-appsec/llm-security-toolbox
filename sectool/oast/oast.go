@@ -3,7 +3,6 @@ package oast
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -15,14 +14,9 @@ func create(timeout time.Duration, label string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.OastCreate(ctx, &service.OastCreateRequest{Label: label})
@@ -56,14 +50,9 @@ func poll(timeout time.Duration, oastID, since string, wait time.Duration, limit
 	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, totalTimeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(totalTimeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+		return err
 	}
 
 	resp, err := client.OastPoll(ctx, &service.OastPollRequest{
@@ -76,7 +65,6 @@ func poll(timeout time.Duration, oastID, since string, wait time.Duration, limit
 		return fmt.Errorf("oast poll failed: %w", err)
 	}
 
-	// Format output as markdown table
 	if len(resp.Events) == 0 {
 		fmt.Println("No events received.")
 		if resp.DroppedCount > 0 {
@@ -124,14 +112,9 @@ func get(timeout time.Duration, oastID, eventID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.OastGet(ctx, &service.OastGetRequest{
@@ -142,7 +125,6 @@ func get(timeout time.Duration, oastID, eventID string) error {
 		return fmt.Errorf("oast get failed: %w", err)
 	}
 
-	// Format output as markdown
 	fmt.Printf("## OAST Event `%s`\n\n", resp.EventID)
 	fmt.Printf("- Time: %s\n", resp.Time)
 	fmt.Printf("- Type: %s\n", strings.ToUpper(resp.Type))
@@ -182,14 +164,9 @@ func list(timeout time.Duration, limit int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.OastList(ctx, &service.OastListRequest{Limit: limit})
@@ -208,7 +185,6 @@ func list(timeout time.Duration, limit int) error {
 		return s.Label != ""
 	})
 
-	// Format output as markdown table
 	if hasLabels {
 		fmt.Println("| oast_id | label | domain | created_at |")
 		fmt.Println("|---------|-------|--------|------------|")
@@ -240,14 +216,9 @@ func del(timeout time.Duration, oastID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	_, err = client.OastDelete(ctx, &service.OastDeleteRequest{

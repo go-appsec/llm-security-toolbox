@@ -32,15 +32,15 @@ func main() {
 func runServiceMode(args []string) int {
 	flags, err := service.ParseDaemonFlags(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing service flags: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error parsing service flags: %v\n", err)
 		return 1
 	}
 
 	if srv, err := service.NewServer(flags); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating service: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error creating service: %v\n", err)
 		return 1
 	} else if err := srv.Run(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Service error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Service error: %v\n", err)
 		return 1
 	}
 	return 0
@@ -69,7 +69,7 @@ func runClientCLI(args []string) int {
 	case "encode":
 		err = encode.Parse(args[1:])
 	case "version", "--version", "-v":
-		fmt.Printf("sectool version %s\n", config.Version)
+		_, _ = fmt.Printf("sectool version %s\n", config.Version)
 		return 0
 	case "help", "--help", "-h":
 		printRootUsage()
@@ -83,14 +83,14 @@ func runClientCLI(args []string) int {
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
 		}
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
 func printRootUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool <command> [options]
 
 Commands:
   init       Initialize working directory for security agent task (user only)

@@ -9,6 +9,58 @@ import (
 	"github.com/go-harden/llm-security-toolbox/sectool/config"
 )
 
+func TestAggregateByTuple(t *testing.T) {
+	t.Parallel()
+
+	t.Run("basic_grouping", func(t *testing.T) {
+		entries := []flowEntry{
+			{method: "GET", host: "example.com", path: "/api", status: 200},
+			{method: "GET", host: "example.com", path: "/api", status: 200},
+			{method: "GET", host: "example.com", path: "/api", status: 200},
+			{method: "POST", host: "example.com", path: "/api", status: 201},
+			{method: "GET", host: "other.com", path: "/", status: 200},
+		}
+
+		result := aggregateByTuple(entries, func(e flowEntry) (string, string, string, int) {
+			return e.host, e.path, e.method, e.status
+		})
+
+		// Should have 3 unique tuples
+		assert.Len(t, result, 3)
+
+		// First entry should have highest count (3)
+		assert.Equal(t, 3, result[0].Count)
+		assert.Equal(t, "GET", result[0].Method)
+		assert.Equal(t, "example.com", result[0].Host)
+		assert.Equal(t, 200, result[0].Status)
+	})
+
+	t.Run("path_normalization", func(t *testing.T) {
+		entries := []flowEntry{
+			{method: "GET", host: "example.com", path: "/api/users/1", status: 200},
+			{method: "GET", host: "example.com", path: "/api/users/2", status: 200},
+			{method: "GET", host: "example.com", path: "/api/users/999", status: 200},
+			{method: "GET", host: "example.com", path: "/api/posts/42", status: 200},
+		}
+
+		result := aggregateByTuple(entries, func(e flowEntry) (string, string, string, int) {
+			return e.host, e.path, e.method, e.status
+		})
+
+		// /api/users/1, /api/users/2, /api/users/999 should group into /api/users/*
+		// /api/posts/42 should be /api/posts/*
+		assert.Len(t, result, 2)
+
+		// First entry should have highest count (3 user requests)
+		assert.Equal(t, 3, result[0].Count)
+		assert.Equal(t, "/api/users/*", result[0].Path)
+
+		// Second entry should be the posts request
+		assert.Equal(t, 1, result[1].Count)
+		assert.Equal(t, "/api/posts/*", result[1].Path)
+	})
+}
+
 func TestExtractRequestMeta(t *testing.T) {
 	t.Parallel()
 

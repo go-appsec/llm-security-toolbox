@@ -39,7 +39,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool oast <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast <command> [options]
 
 Out-of-band Application Security Testing (OAST) for detecting blind
 vulnerabilities (SSRF, XXE, blind SQLi, command injection, etc).
@@ -128,7 +128,7 @@ func parseCreate(args []string) error {
 	fs.StringVar(&name, "name", "", "alias for --label")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool oast create [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast create [options]
 
 Create a new OAST session.
 
@@ -163,7 +163,7 @@ func parsePoll(args []string) error {
 	_ = fs.MarkHidden("count")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool oast poll <oast_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast poll <oast_id> [options]
 
 Poll for OAST interactions. Returns a summary table of events. Use
 'sectool oast get' to view full details for a specific event.
@@ -195,7 +195,7 @@ func parseGet(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool oast get <oast_id> <event_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast get <oast_id> <event_id> [options]
 
 Get full details for a specific OAST event. Use 'sectool oast poll' to list
 events and get their event_id values.
@@ -232,7 +232,7 @@ func parseList(args []string) error {
 	_ = fs.MarkHidden("count")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool oast list [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast list [options]
 
 List active OAST sessions (most recent first).
 
@@ -256,7 +256,7 @@ func parseDelete(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool oast delete <oast_id> [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool oast delete <oast_id> [options]
 
 Delete an OAST session.
 

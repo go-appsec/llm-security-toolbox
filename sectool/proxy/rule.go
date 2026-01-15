@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"os"
+	"slices"
 	"time"
 
 	"github.com/go-harden/llm-security-toolbox/sectool/service"
@@ -13,14 +13,9 @@ func ruleList(timeout time.Duration, websocket bool, limit int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.RuleList(ctx, &service.RuleListRequest{
@@ -46,13 +41,9 @@ func ruleList(timeout time.Duration, websocket bool, limit int) error {
 
 func printRuleTable(rules []service.RuleEntry) {
 	// Check if any rules have labels
-	hasLabels := false
-	for _, r := range rules {
-		if r.Label != "" {
-			hasLabels = true
-			break
-		}
-	}
+	hasLabels := slices.ContainsFunc(rules, func(r service.RuleEntry) bool {
+		return r.Label != ""
+	})
 
 	if hasLabels {
 		fmt.Println("| rule_id | label | type | regex | match | replace |")
@@ -102,14 +93,9 @@ func ruleAdd(timeout time.Duration, ruleType, match, replace, label string, isRe
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.RuleAdd(ctx, &service.RuleAddRequest{
@@ -144,14 +130,9 @@ func ruleUpdate(timeout time.Duration, ruleID, ruleType, match, replace, label s
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	resp, err := client.RuleUpdate(ctx, &service.RuleUpdateRequest{
@@ -187,14 +168,9 @@ func ruleDelete(timeout time.Duration, ruleID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	workDir, err := os.Getwd()
+	client, err := service.ConnectedClient(ctx, timeout)
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	client := service.NewClient(workDir, service.WithTimeout(timeout))
-	if err := client.EnsureService(ctx); err != nil {
-		return fmt.Errorf("failed to start service: %w (check %s)", err, client.LogPath())
+		return err
 	}
 
 	if _, err := client.RuleDelete(ctx, &service.RuleDeleteRequest{

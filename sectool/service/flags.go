@@ -91,7 +91,7 @@ func Parse(args []string) error {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `Usage: sectool service <command> [options]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: sectool service <command> [options]
 
 Manage the sectool background service. The service auto-starts when needed;
 these commands are for debugging and manual control.
@@ -137,7 +137,7 @@ func parseStatus(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool service status [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool service status [options]
 
 Show service status and health.
 
@@ -161,7 +161,7 @@ func parseStop(args []string) error {
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool service stop [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool service stop [options]
 
 Stop the running service.
 
@@ -189,7 +189,7 @@ func parseLogs(args []string) error {
 	fs.IntVarP(&lines, "lines", "n", 50, "number of lines to show")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: sectool service logs [options]
+		_, _ = fmt.Fprint(os.Stderr, `Usage: sectool service logs [options]
 
 View service logs.
 

@@ -11,48 +11,6 @@ import (
 	"github.com/go-harden/llm-security-toolbox/sectool/config"
 )
 
-func TestLoadOrCreateConfig(t *testing.T) {
-	t.Parallel()
-
-	t.Run("creates_new_config", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "config.json")
-
-		cfg, err := loadOrCreateConfig(path)
-		require.NoError(t, err)
-		assert.Equal(t, config.Version, cfg.Version)
-		assert.Equal(t, config.DefaultBurpMCPURL, cfg.BurpMCPURL)
-	})
-
-	t.Run("loads_existing_config", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "config.json")
-
-		// Create an existing config
-		existing := &config.Config{
-			Version:        "0.0.1",
-			BurpMCPURL:     "http://custom:1234/sse",
-			PreserveGuides: true,
-		}
-		require.NoError(t, existing.Save(path))
-
-		cfg, err := loadOrCreateConfig(path)
-		require.NoError(t, err)
-		assert.Equal(t, "http://custom:1234/sse", cfg.BurpMCPURL)
-		assert.True(t, cfg.PreserveGuides)
-	})
-
-	t.Run("error_on_invalid_JSON", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "config.json")
-
-		require.NoError(t, os.WriteFile(path, []byte("invalid"), 0644))
-
-		_, err := loadOrCreateConfig(path)
-		assert.Error(t, err)
-	})
-}
-
 func TestWriteGuideIfNeeded(t *testing.T) {
 	t.Parallel()
 
@@ -263,7 +221,7 @@ func TestRun(t *testing.T) {
 		sectoolDir := filepath.Join(dir, ".sectool")
 		require.NoError(t, os.MkdirAll(sectoolDir, 0755))
 
-		cfg := config.DefaultConfig(config.Version)
+		cfg := config.DefaultConfig()
 		cfg.PreserveGuides = true
 		require.NoError(t, cfg.Save(filepath.Join(sectoolDir, "config.json")))
 
