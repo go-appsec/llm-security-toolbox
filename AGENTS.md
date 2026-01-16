@@ -276,13 +276,20 @@ All endpoints over Unix socket at `.sectool/service/socket`:
 
 ### Testing
 
+Structure and conventions:
 - One `_test.go` file per implementation file that requires testing
 - One `func Test<FunctionName>` per target function, using table-driven tests for consistent validation or `t.Run` test cases when assertions vary
 - Test case names should be at most 3 to 5 words and in lower case with underscores
+- Use `t.Parallel()` at test function start, but not within test cases
+- Isolated temp directories via `t.TempDir()` when needed
+- Context timeouts via `t.Context()` for tests with I/O
+
+Assertions and validation:
 - Assertions rely on `testify` (`require` for setup, `assert` for assertions)
-- With assertions don't include messages unless the message provides context outside of the test point, or the two variables being evaluated
-- Always verify with `make test-all` and `make lint` before considering changes complete
-- Isolated temp directories via `t.TempDir()`
-- Context timeouts via `t.Context()`
+- Don't include messages unless the message provides context outside of the test point or the two variables being evaluated
+
+Test helpers:
 - Mock MCP server available via `service/mcp.NewTestMCPServer()`
-- Use `t.Parallel()` for independent tests
+
+Verification:
+- Always verify with `make test-all` and `make lint` before considering changes complete
