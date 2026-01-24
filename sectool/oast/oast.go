@@ -45,7 +45,7 @@ func create(mcpURL string, timeout time.Duration, label string) error {
 	return nil
 }
 
-func poll(mcpURL string, timeout time.Duration, oastID, since string, wait time.Duration, limit int) error {
+func poll(mcpURL string, timeout time.Duration, oastID, since, eventType string, wait time.Duration, limit int) error {
 	totalTimeout := timeout + wait
 	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
 	defer cancel()
@@ -56,7 +56,7 @@ func poll(mcpURL string, timeout time.Duration, oastID, since string, wait time.
 	}
 	defer func() { _ = client.Close() }()
 
-	resp, err := client.OastPoll(ctx, oastID, since, wait, limit)
+	resp, err := client.OastPoll(ctx, oastID, since, eventType, wait, limit)
 	if err != nil {
 		return fmt.Errorf("oast poll failed: %w", err)
 	}

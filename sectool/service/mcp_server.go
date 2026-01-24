@@ -475,16 +475,18 @@ Use cases: blind SSRF, blind XXE, DNS exfiltration, email verification bypass.`)
 
 func (m *mcpServer) oastPollTool() mcp.Tool {
 	return mcp.NewTool("oast_poll",
-		mcp.WithDescription(`Poll for OAST interaction events (DNS/HTTP/SMTP).
+		mcp.WithDescription(`Poll for OAST interaction events.
 
 Options:
 - Immediate: omit wait
 - Long-poll: set wait (e.g., '30s', max 120s)
 - Incremental: since=event_id or "last" for only new events
+- Filter by type: dns, http, smtp, ftp, ldap, smb, responder
 
 Response includes events (event_id) and optional dropped_count; use oast_get for full event details.`),
 		mcp.WithString("oast_id", mcp.Required(), mcp.Description("OAST session ID, label, or domain")),
 		mcp.WithString("since", mcp.Description("Return events after this event_id, or 'last' to get events received since your last oast_poll call (per-session cursor)")),
+		mcp.WithString("type", mcp.Description("Filter by event type: dns, http, smtp, ftp, ldap, smb, responder")),
 		mcp.WithString("wait", mcp.Description("Long-poll duration (e.g., '30s', max 120s)")),
 		mcp.WithNumber("limit", mcp.Description("Maximum number of events to return")),
 	)
@@ -1191,11 +1193,12 @@ func (m *mcpServer) handleOastPoll(ctx context.Context, req mcp.CallToolRequest)
 	}
 
 	since := req.GetString("since", "")
+	eventType := strings.ToLower(req.GetString("type", ""))
 	limit := req.GetInt("limit", 0)
 
-	log.Printf("mcp/oast_poll: polling session %s (wait=%v since=%q limit=%d)", oastID, wait, since, limit)
+	log.Printf("mcp/oast_poll: polling session %s (wait=%v since=%q type=%q limit=%d)", oastID, wait, since, eventType, limit)
 
-	result, err := m.service.oastBackend.PollSession(ctx, oastID, since, wait, limit)
+	result, err := m.service.oastBackend.PollSession(ctx, oastID, since, eventType, wait, limit)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return errorResult("session not found"), nil

@@ -517,7 +517,7 @@ func TestIntegration_OAST(t *testing.T) {
 			t.Skip("no OAST session created")
 		}
 
-		resp, err := client.OastPoll(t.Context(), oastID, "", 0, 0)
+		resp, err := client.OastPoll(t.Context(), oastID, "", "", 0, 0)
 		require.NoError(t, err)
 
 		// May or may not have events depending on timing
@@ -530,13 +530,13 @@ func TestIntegration_OAST(t *testing.T) {
 		}
 
 		// Short wait - should return quickly with no events
-		resp, err := client.OastPoll(t.Context(), oastID, "", 200*time.Millisecond, 0)
+		resp, err := client.OastPoll(t.Context(), oastID, "", "", 200*time.Millisecond, 0)
 		require.NoError(t, err)
 		t.Logf("oast_poll: %d events", len(resp.Events))
 	})
 
 	t.Run("poll_invalid_session", func(t *testing.T) {
-		_, err := client.OastPoll(t.Context(), "nonexistent", "", 0, 0)
+		_, err := client.OastPoll(t.Context(), "nonexistent", "", "", 0, 0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})

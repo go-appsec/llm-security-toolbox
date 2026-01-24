@@ -199,7 +199,7 @@ func (b *InteractshBackend) pollLoop(sess *oastSession) {
 	<-sess.stopPolling
 }
 
-func (b *InteractshBackend) PollSession(ctx context.Context, idOrDomain string, since string, wait time.Duration, limit int) (*OastPollResultInfo, error) {
+func (b *InteractshBackend) PollSession(ctx context.Context, idOrDomain string, since string, eventType string, wait time.Duration, limit int) (*OastPollResultInfo, error) {
 	sess, err := b.resolveSession(idOrDomain)
 	if err != nil {
 		return nil, err
@@ -214,7 +214,7 @@ func (b *InteractshBackend) PollSession(ctx context.Context, idOrDomain string, 
 			return nil, errors.New("session has been deleted")
 		}
 
-		events := sess.filterEvents(since)
+		events := sess.filterEvents(since, eventType)
 		if len(events) > 0 || wait == 0 || time.Now().After(deadline) || ctx.Err() != nil {
 			if limit > 0 && len(events) > limit {
 				events = events[:limit]
@@ -239,30 +239,51 @@ func (b *InteractshBackend) PollSession(ctx context.Context, idOrDomain string, 
 	}
 }
 
-// filterEvents returns events based on the since filter. Caller must hold s.mu until result slice is discarded.
-func (s *oastSession) filterEvents(since string) []OastEventInfo {
+// filterEvents returns events based on the since and eventType filters.
+// Caller must hold s.mu until result slice is discarded.
+func (s *oastSession) filterEvents(since, eventType string) []OastEventInfo {
+	var events []OastEventInfo
 	switch since {
 	case "":
-		return s.events
+		events = s.events
 	case "last":
 		if s.lastPollIdx >= len(s.events) {
-			return nil
+			events = nil
+		} else {
+			events = s.events[s.lastPollIdx:]
 		}
-		return s.events[s.lastPollIdx:]
-	}
-
-	// Find event by ID and return everything after it
-	for i, e := range s.events {
-		if e.ID == since {
-			if i+1 >= len(s.events) {
-				return nil
+	default:
+		// Find event by ID and return everything after it
+		found := false
+		for i, e := range s.events {
+			if e.ID == since {
+				if i+1 >= len(s.events) {
+					events = nil
+				} else {
+					events = s.events[i+1:]
+				}
+				found = true
+				break
 			}
-			return s.events[i+1:]
+		}
+		if !found {
+			// Event ID not found - return all events
+			events = s.events
 		}
 	}
 
-	// Event ID not found - return all events
-	return s.events
+	if eventType == "" || len(events) == 0 {
+		return events
+	}
+
+	// Filter by event type
+	filtered := make([]OastEventInfo, 0, len(events))
+	for _, e := range events {
+		if e.Type == eventType {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 // updateLastPollIdx updates lastPollIdx based on returned events (for --since last tracking).

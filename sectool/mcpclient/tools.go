@@ -274,14 +274,18 @@ func (c *Client) OastCreate(ctx context.Context, label string) (*OastCreateRespo
 
 // OastPoll calls oast_poll and returns events.
 // since: empty returns all, "last" returns since last poll, or an event ID
+// eventType: filter by type (dns, http, smtp, ftp, ldap, smb, responder), empty returns all
 // wait: how long to block waiting for events (0 = return immediately)
 // limit: max events to return (0 = no limit)
-func (c *Client) OastPoll(ctx context.Context, oastID, since string, wait time.Duration, limit int) (*OastPollResponse, error) {
+func (c *Client) OastPoll(ctx context.Context, oastID, since, eventType string, wait time.Duration, limit int) (*OastPollResponse, error) {
 	args := map[string]interface{}{
 		"oast_id": oastID,
 	}
 	if since != "" {
 		args["since"] = since
+	}
+	if eventType != "" {
+		args["type"] = eventType
 	}
 	if wait != 0 {
 		args["wait"] = wait.String()
