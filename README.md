@@ -93,23 +93,36 @@ The CLI provides a human-friendly interface to the same MCP tools that agents us
 sectool proxy summary              # Aggregated traffic summary
 sectool proxy list --host example  # List flows matching filter
 sectool proxy export <flow_id>     # Export flow to ./sectool-requests/<flow_id>/
+sectool proxy rule list            # List match/replace rules
 
 # Crawling
 sectool crawl create --url https://example.com
+sectool crawl seed <session_id> --url https://example.com/other
 sectool crawl status <session_id>
+sectool crawl summary <session_id>
 sectool crawl list <session_id>
+sectool crawl forms <session_id>
+sectool crawl errors <session_id>
+sectool crawl export <flow_id>
+sectool crawl sessions
+sectool crawl stop <session_id>
 
 # Replay requests
 sectool replay send --flow <flow_id> --add-header "X-Test: value"
 sectool replay get <replay_id>
+sectool replay create              # Create request bundle from scratch
 
 # Out-of-band testing
 sectool oast create
 sectool oast poll <oast_id>
+sectool oast get <event_id>
+sectool oast list
+sectool oast delete <oast_id>
 
 # Encoding utilities
 sectool encode url "hello world"
 sectool encode base64 "test"
+sectool encode html "<script>"
 ```
 
 Use `sectool <command> --help` for detailed options.

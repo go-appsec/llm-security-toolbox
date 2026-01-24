@@ -38,17 +38,14 @@ MCP Agent  → MCP Server → Backends (Burp MCP, OAST, Crawler)
 ### Service Layer
 
 - `sectool/service/server.go` - MCP server lifecycle and backend coordination
-- `sectool/service/mcp_server.go` - MCP server exposing tools (Streamable HTTP + SSE)
+- `sectool/service/mcp_server.go` - MCP server exposing tools; contains all tool handlers (proxy, crawl, replay, oast, encode)
 - `sectool/service/flags.go` - MCP server flag parsing (`--port`, `--workflow`, `--config`)
 - `sectool/service/backend.go` - HttpBackend, OastBackend, CrawlerBackend interfaces
 - `sectool/service/backend_http_burp.go` - Burp MCP implementation of HttpBackend
 - `sectool/service/backend_oast_interactsh.go` - Interactsh implementation of OastBackend
 - `sectool/service/backend_crawler_colly.go` - Colly-based crawler implementation
-- `sectool/service/proxy_handler.go` - Proxy tool implementations (summary, list, get, rules)
-- `sectool/service/replay_handler.go` - Replay tool implementations (send, get)
-- `sectool/service/oast_handler.go` - OAST tool implementations
-- `sectool/service/crawl_handler.go` - Crawl tool implementations
-- `sectool/service/httputil.go` - HTTP parsing utilities
+- `sectool/service/httputil.go` - HTTP request/response parsing utilities
+- `sectool/service/jsonutil.go` - JSON field modification utilities
 - `sectool/service/types.go` - Shared MCP response types
 
 ### Burp MCP Client
