@@ -1,13 +1,13 @@
 ## Project Overview
 
-**llm-security-toolbox (sectool)** is an LLM-first CLI toolkit for application security testing. It enables humans and agentic coding tools to collaborate on security testing, backed by Burp Suite Pro via PortSwigger MCP (Model Context Protocol).
+**llm-security-toolbox (sectool)** is an LLM-first CLI toolkit for application security testing. It enables humans and agentic coding tools to collaborate on security testing via MCP (Model Context Protocol). Supports a built-in HTTP/HTTPS proxy or Burp Suite integration.
 
 Key characteristics:
 - MCP-primary architecture: single API serves both agents and CLI
 - CLI is a thin client over MCP for human interaction
 - Global config at `~/.sectool/config.json` (auto-created on first run)
 - All output in markdown format for LLM consumption
-- Pluggable backend architecture (Burp MCP for HTTP, Interactsh for OAST, Colly for crawling)
+- Pluggable backend architecture (built-in goproxy or Burp MCP for HTTP, Interactsh for OAST, Colly for crawling)
 
 ## Build Commands
 
@@ -22,8 +22,8 @@ make lint           # Run golangci-lint and go vet
 ## Architecture
 
 ```
-CLI Command → MCP Client → MCP Server → Backends (Burp MCP, OAST, Crawler)
-MCP Agent  → MCP Server → Backends (Burp MCP, OAST, Crawler)
+CLI Command → MCP Client → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawler)
+MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawler)
 ```
 
 ### Core Files
@@ -51,6 +51,7 @@ MCP Agent  → MCP Server → Backends (Burp MCP, OAST, Crawler)
 - `sectool/service/mcp_encode.go` - Encode tool handlers (url, base64, html)
 - `sectool/service/flags.go` - MCP server flag parsing (`--port`, `--workflow`, `--config`)
 - `sectool/service/backend.go` - HttpBackend, OastBackend, CrawlerBackend interfaces
+- `sectool/service/backend_http_builtin.go` - Built-in goproxy implementation of HttpBackend
 - `sectool/service/backend_http_burp.go` - Burp MCP implementation of HttpBackend
 - `sectool/service/backend_oast_interactsh.go` - Interactsh implementation of OastBackend
 - `sectool/service/backend_crawler_colly.go` - Colly-based crawler implementation
@@ -94,6 +95,7 @@ Global config at `~/.sectool/config.json` (auto-created with defaults):
 {
   "version": "0.0.1",
   "mcp_port": 9119,
+  "burp_required": false,
   "crawler": {
     "max_response_body_bytes": 1048576,
     "include_subdomains": true,
@@ -153,8 +155,10 @@ type OastBackend interface {
 
 Start MCP server:
 ```bash
-sectool mcp                    # MCP server on port 9119
-sectool mcp --port 8080        # Custom port
+sectool mcp                    # MCP server on port 9119, auto-detect proxy backend
+sectool mcp --proxy-port 8080  # Force built-in proxy on port 8080
+sectool mcp --burp             # Force Burp MCP (fails if unavailable)
+sectool mcp --port 8080        # Custom MCP server port
 sectool mcp --workflow explore # Pre-set workflow mode
 ```
 

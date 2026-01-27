@@ -29,15 +29,7 @@ cd llm-security-toolbox
 make build
 ```
 
-### 2. Set up Burp Suite with MCP
-
-Install [Burp Suite Community](https://portswigger.net/burp/communitydownload) and add the MCP extension from the BApp Store.
-
-Start Burp and ensure the MCP server is running on `http://127.0.0.1:9876/sse`. It's best if your burp session starts fresh without a proxy history for when starting with your agent.
-
-> Note: Burp MCP is currently required. A built-in proxy is planned for future releases ([#3](https://github.com/go-harden/llm-security-toolbox/issues/3)).
-
-### 3. Start the MCP server
+### 2. Start the MCP server
 
 Run sectool as an MCP server:
 
@@ -48,6 +40,18 @@ sectool mcp
 This starts an MCP server on port 9119 with two endpoints:
 - `/mcp` - Streamable HTTP transport (recommended)
 - `/sse` - SSE transport (legacy, for older clients)
+
+**Proxy backends:**
+
+| Option | Description |
+|--------|-------------|
+| (default) | Auto-detect: tries Burp MCP first, falls back to built-in proxy |
+| `--proxy-port 8080` | Force built-in proxy on specified port (goproxy-based) |
+| `--burp` | Force Burp MCP (fails if unavailable) |
+
+The built-in proxy supports HTTPS interception via auto-generated CA certificates, match/replace rules, and WebSocket proxying. To use HTTPS interception, install the generated CA certificate from `~/.sectool/ca.crt`.
+
+**Burp Suite setup (optional):** To use Burp Suite instead of the built-in proxy, install [Burp Suite Community](https://portswigger.net/burp/communitydownload) and add the MCP extension from the BApp Store. Start Burp and ensure the MCP server is running on `http://127.0.0.1:9876/sse`. By default sectool will auto-detect and prefer Burp when available.
 
 **Workflow modes:** Use `--workflow` to configure how the agent receives testing instructions:
 
@@ -66,6 +70,12 @@ sectool mcp --workflow none        # No workflow instructions
 | `none` | No workflow instructions, all tools available immediately |
 
 Agents generally want to do everything for you (sometimes poorly), or step you through a process without adding much value. Our workflow instructions guide a more collaborative approach that strikes a balance between these extremes, while focusing instruction tokens on specific task goals. If the default behavior doesn't work for you, try `--workflow none` and [open an issue](https://github.com/go-harden/llm-security-toolbox/issues) describing your experience or recommendations.
+
+### 3. Configure your browser (built-in proxy only)
+
+When using the built-in proxy, configure your browser to use `127.0.0.1:8080` (or your specified `--proxy-port`). For HTTPS interception, install the CA certificate from `~/.sectool/ca.crt`.
+
+If using Burp Suite, configure your browser through Burp's proxy settings instead.
 
 ### 4. Configure your agent
 
@@ -129,7 +139,7 @@ Use `sectool <command> --help` for detailed options.
 
 ## Key Features
 
-- **Proxy history access** - Query and filter HTTP traffic captured through Burp Suite
+- **Proxy history access** - Query and filter HTTP traffic captured through built-in proxy or Burp Suite
 - **Proxy rules** - Add match/replace rules to modify requests and responses in transit
 - **Request export and replay** - Export requests to disk, edit them, and replay with modifications
 - **Web crawling** - Discover application structure, forms, and endpoints
