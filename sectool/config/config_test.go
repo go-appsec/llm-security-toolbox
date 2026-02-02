@@ -16,7 +16,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	original := &Config{
-		Version: "0.0.1",
+		Version: Version,
 		MCPPort: 8080,
 	}
 
@@ -47,7 +47,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	// Write minimal config (missing optional fields)
-	minimalJSON := `{"version": "0.0.1"}`
+	const minimalJSON = `{"version": "0.1.0"}`
 	err := os.WriteFile(path, []byte(minimalJSON), 0644)
 	require.NoError(t, err)
 
@@ -87,7 +87,7 @@ func TestLoadOrDefaultConfig(t *testing.T) {
 		path := filepath.Join(dir, "config.json")
 
 		existing := &Config{
-			Version: "0.0.1",
+			Version: Version,
 			MCPPort: 8080,
 		}
 		require.NoError(t, existing.Save(path))

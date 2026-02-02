@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	Version              = "0.0.1"
+	Version              = "0.1.0"
 	DefaultBurpMCPURL    = "http://127.0.0.1:9876/sse"
 	DefaultBurpProxyAddr = "127.0.0.1:8080"
 	DefaultMCPPort       = 9119
