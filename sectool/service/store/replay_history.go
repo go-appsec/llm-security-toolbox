@@ -1,6 +1,7 @@
 package store
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -59,6 +60,7 @@ func (s *ReplayHistoryStore) Store(entry *ReplayHistoryEntry) {
 func (s *ReplayHistoryStore) Get(flowID string) (*ReplayHistoryEntry, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	e, ok := s.byFlowID[flowID]
 	return e, ok
 }
@@ -67,9 +69,8 @@ func (s *ReplayHistoryStore) Get(flowID string) (*ReplayHistoryEntry, bool) {
 func (s *ReplayHistoryStore) List() []*ReplayHistoryEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]*ReplayHistoryEntry, len(s.entries))
-	copy(result, s.entries)
-	return result
+
+	return slices.Clone(s.entries)
 }
 
 // UpdateReferenceOffset updates the max proxy offset and detects history clear.
@@ -97,6 +98,7 @@ func (s *ReplayHistoryStore) UpdateReferenceOffset(currentMaxOffset uint32) (uin
 func (s *ReplayHistoryStore) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	return len(s.entries)
 }
 
@@ -104,6 +106,7 @@ func (s *ReplayHistoryStore) Count() int {
 func (s *ReplayHistoryStore) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.entries = nil
 	s.byFlowID = make(map[string]*ReplayHistoryEntry)
 	s.lastKnownOffset = 0

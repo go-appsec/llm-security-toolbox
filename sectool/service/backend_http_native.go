@@ -101,11 +101,12 @@ func (b *NativeProxyBackend) CACert() *x509.Certificate {
 func (b *NativeProxyBackend) GetProxyHistory(ctx context.Context, count int, offset uint32) ([]ProxyEntry, error) {
 	entries := b.server.History().List(count, offset)
 
+	var buf bytes.Buffer
 	result := make([]ProxyEntry, 0, len(entries))
 	for _, entry := range entries {
 		// Use FormatRequest/FormatResponse which handles both HTTP/1.1 and HTTP/2
-		reqStr := string(entry.FormatRequest())
-		respStr := string(entry.FormatResponse())
+		reqStr := string(entry.FormatRequest(&buf))
+		respStr := string(entry.FormatResponse(&buf))
 		result = append(result, ProxyEntry{
 			Request:  reqStr,
 			Response: respStr,
@@ -141,12 +142,10 @@ func (b *NativeProxyBackend) SendRequest(ctx context.Context, name string, req S
 		Protocol: protocol,
 	}
 
-	// Create sender with JSON modifier
 	sender := &proxy.Sender{
 		JSONModifier: ModifyJSONBodyMap,
 	}
 
-	// Send request
 	var result *proxy.SendResult
 	var err error
 	if req.FollowRedirects {
@@ -158,7 +157,6 @@ func (b *NativeProxyBackend) SendRequest(ctx context.Context, name string, req S
 		return nil, err
 	}
 
-	// Convert response to SendRequestResult format
 	var buf bytes.Buffer
 	return &SendRequestResult{
 		Headers:  result.Response.SerializeHeaders(&buf),

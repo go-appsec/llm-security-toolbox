@@ -23,15 +23,9 @@ const (
 
 	// initialWindowSize is the HTTP/2 default window (64KB)
 	initialWindowSize = 65535
-
-	// streamIdleTimeout is how long before a stale stream is cleaned up
 	streamIdleTimeout = 5 * time.Minute
-
-	// cleanupInterval is how often to check for stale streams
-	cleanupInterval = 1 * time.Minute
-
-	// h2Preface is the HTTP/2 connection preface
-	h2Preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+	cleanupInterval   = 1 * time.Minute
+	h2Preface         = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 )
 
 // streamState represents the state of an HTTP/2 stream

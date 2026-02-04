@@ -159,7 +159,6 @@ func (h *http1Handler) handleSinglePlainHTTP(ctx context.Context, clientConn net
 
 	h.storeEntry(req, resp, startTime)
 
-	// Check Connection header for keep-alive
 	connHeader := strings.ToLower(resp.GetHeader("Connection"))
 	return connHeader != "close"
 }
@@ -306,7 +305,6 @@ func (h *http1Handler) handleSingleTLS(ctx context.Context, clientConn, upstream
 	startTime := time.Now()
 	var buf bytes.Buffer
 
-	// Parse request from client
 	req, err := parseRequest(clientReader)
 	if err != nil {
 		if !errors.Is(err, io.EOF) && !errors.Is(err, ErrEmptyRequest) {
@@ -323,17 +321,14 @@ func (h *http1Handler) handleSingleTLS(ctx context.Context, clientConn, upstream
 		req = h.ruleApplier.ApplyRequestRules(req)
 	}
 
-	// Check for WebSocket upgrade (wss://)
 	if h.wsHandler != nil && isWebSocketUpgrade(req) {
 		// Reuse existing upstream connection to avoid race window
 		h.wsHandler.HandleTLSWithUpstream(ctx, clientConn, clientReader, upstreamConn, upstreamReader, req)
 		return false // WebSocket takes over, don't continue loop
 	}
 
-	// Set write deadline on upstream
 	_ = upstreamConn.SetWriteDeadline(time.Now().Add(writeTimeout))
 
-	// Forward request to upstream
 	if _, err := upstreamConn.Write(req.SerializeRaw(&buf, false)); err != nil {
 		log.Printf("proxy: failed to send TLS request: %v", err)
 		if isTimeoutError(err) {
@@ -345,10 +340,8 @@ func (h *http1Handler) handleSingleTLS(ctx context.Context, clientConn, upstream
 		return false
 	}
 
-	// Set read deadline on upstream
 	_ = upstreamConn.SetReadDeadline(time.Now().Add(readTimeout))
 
-	// Parse response from upstream
 	resp, err := parseResponse(upstreamReader, req.Method)
 	if err != nil {
 		log.Printf("proxy: failed to parse TLS response: %v", err)
@@ -381,10 +374,8 @@ func (h *http1Handler) handleSingleTLS(ctx context.Context, clientConn, upstream
 		resp.Body = resp.Body[:h.maxBodyBytes]
 	}
 
-	// Store in history
 	h.storeEntry(req, resp, startTime)
 
-	// Check Connection header for keep-alive
 	connHeader := strings.ToLower(resp.GetHeader("Connection"))
 	return connHeader != "close"
 }

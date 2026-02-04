@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"sync"
 	"testing"
 	"time"
@@ -435,9 +436,10 @@ func TestFormatRequest(t *testing.T) {
 		},
 	}
 
+	var buf bytes.Buffer // reuse to validate reset
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.entry.FormatRequest()
+			result := tt.entry.FormatRequest(&buf)
 			if tt.wantNil {
 				assert.Nil(t, result)
 			} else {
@@ -563,9 +565,10 @@ func TestFormatResponse(t *testing.T) {
 		},
 	}
 
+	var buf bytes.Buffer // reuse to validate reset
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.entry.FormatResponse()
+			result := tt.entry.FormatResponse(&buf)
 			if tt.wantNil {
 				assert.Nil(t, result)
 			} else {

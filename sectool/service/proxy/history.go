@@ -17,7 +17,7 @@ type HistoryStore struct {
 	mu         sync.RWMutex
 	storage    store.Storage
 	nextOffset uint32
-	offsetKeys map[uint32]string // offset → storage key
+	offsetKeys map[uint32]string // offset -> storage key
 }
 
 // newHistoryStore creates a history store using the provided storage backend.
@@ -41,13 +41,10 @@ func (h *HistoryStore) Store(entry *HistoryEntry) uint32 {
 	key := fmt.Sprintf("proxy:history:%d", offset)
 	h.offsetKeys[offset] = key
 
-	data, err := json.Marshal(entry)
-	if err != nil {
+	if data, err := json.Marshal(entry); err != nil {
 		log.Printf("proxy: failed to marshal history entry %d: %v", offset, err)
 		return offset
-	}
-
-	if err := h.storage.Save(key, data); err != nil {
+	} else if err := h.storage.Save(key, data); err != nil {
 		log.Printf("proxy: failed to save history entry %d: %v", offset, err)
 	}
 	return offset
@@ -117,9 +114,7 @@ func (h *HistoryStore) Update(entry *HistoryEntry) {
 	if err != nil {
 		log.Printf("proxy: failed to marshal history entry %d for update: %v", entry.Offset, err)
 		return
-	}
-
-	if err := h.storage.Save(key, data); err != nil {
+	} else if err := h.storage.Save(key, data); err != nil {
 		log.Printf("proxy: failed to update history entry %d: %v", entry.Offset, err)
 	}
 }
@@ -132,42 +127,40 @@ func (h *HistoryStore) Close() {
 // FormatRequest returns the request in wire-compatible format.
 // For HTTP/1.1, uses SerializeRaw to preserve anomalies like bare-LF.
 // For HTTP/2, builds a similar text format from pseudo-headers and headers.
-func (e *HistoryEntry) FormatRequest() []byte {
+func (e *HistoryEntry) FormatRequest(buf *bytes.Buffer) []byte {
 	switch e.Protocol {
 	case "h2":
 		if e.H2Request == nil {
 			return nil
 		}
-		return formatH2Request(e.H2Request)
+		return formatH2Request(buf, e.H2Request)
 
 	default:
 		// HTTP/1.1 or websocket
 		if e.Request == nil {
 			return nil
 		}
-		var buf bytes.Buffer
-		return e.Request.SerializeRaw(&buf, false)
+		return e.Request.SerializeRaw(buf, false)
 	}
 }
 
 // FormatResponse returns the response in wire-compatible format.
 // For HTTP/1.1, uses SerializeRaw to preserve anomalies like bare-LF.
 // For HTTP/2, builds a similar text format from pseudo-headers and headers.
-func (e *HistoryEntry) FormatResponse() []byte {
+func (e *HistoryEntry) FormatResponse(buf *bytes.Buffer) []byte {
 	switch e.Protocol {
 	case "h2":
 		if e.H2Response == nil {
 			return nil
 		}
-		return formatH2Response(e.H2Response)
+		return formatH2Response(buf, e.H2Response)
 
 	default:
 		// HTTP/1.1 or websocket
 		if e.Response == nil {
 			return nil
 		}
-		var buf bytes.Buffer
-		return e.Response.SerializeRaw(&buf, false)
+		return e.Response.SerializeRaw(buf, false)
 	}
 }
 
@@ -264,8 +257,8 @@ func (e *HistoryEntry) GetResponseHeader(name string) string {
 // formatH2Request formats an H2 request as HTTP/1.1 text for display and replay.
 // Uses HTTP/1.1 version in the request line so it can be parsed by the standard
 // HTTP/1.1 parser. The actual protocol ("h2") is tracked separately in HistoryEntry.Protocol.
-func formatH2Request(req *H2RequestData) []byte {
-	var buf bytes.Buffer
+func formatH2Request(buf *bytes.Buffer, req *H2RequestData) []byte {
+	buf.Reset()
 
 	// Request line - use HTTP/1.1 for parser compatibility; actual protocol tracked separately
 	buf.WriteString(req.Method)
@@ -278,7 +271,6 @@ func formatH2Request(req *H2RequestData) []byte {
 	buf.WriteString(req.Authority)
 	buf.WriteString("\r\n")
 
-	// Headers
 	for _, h := range req.Headers {
 		buf.WriteString(h.Name)
 		buf.WriteString(": ")
@@ -293,10 +285,9 @@ func formatH2Request(req *H2RequestData) []byte {
 }
 
 // formatH2Response formats an H2 response for display.
-func formatH2Response(resp *H2ResponseData) []byte {
-	var buf bytes.Buffer
+func formatH2Response(buf *bytes.Buffer, resp *H2ResponseData) []byte {
+	buf.Reset()
 
-	// Status line
 	buf.WriteString("HTTP/2 ")
 	buf.WriteString(strconv.Itoa(resp.StatusCode))
 	text := http.StatusText(resp.StatusCode)
@@ -306,7 +297,6 @@ func formatH2Response(resp *H2ResponseData) []byte {
 	}
 	buf.WriteString("\r\n")
 
-	// Headers
 	for _, h := range resp.Headers {
 		buf.WriteString(h.Name)
 		buf.WriteString(": ")

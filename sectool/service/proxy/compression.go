@@ -119,8 +119,7 @@ func Compress(data []byte, encoding string) ([]byte, error) {
 		gw := gzip.NewWriter(&buf)
 		if _, err := gw.Write(data); err != nil {
 			return nil, err
-		}
-		if err := gw.Close(); err != nil {
+		} else if err := gw.Close(); err != nil {
 			return nil, err
 		}
 		return buf.Bytes(), nil
