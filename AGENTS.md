@@ -82,10 +82,11 @@ MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawle
 
 ### State Management
 
-- `sectool/service/store/flow.go` - Flow ID → Burp offset mapping (ephemeral)
-- `sectool/service/store/crawl_flow.go` - Crawler flow storage (ephemeral)
-- `sectool/service/store/hash.go` - Content hashing for flow identity
-- `sectool/service/store/request.go` - Replay result storage with TTL cleanup
+- `sectool/service/store/storage.go` - Storage interface and in-memory implementation
+- `sectool/service/store/spill.go` - SpillStore: disk-paging Storage with LRU eviction, encryption, and compaction
+- `sectool/service/store/serialize.go` - Msgpack serialization helpers
+- `sectool/service/store/proxy_index.go` - Bidirectional flow_id ↔ proxy offset mapping
+- `sectool/service/store/replay_history.go` - Replay request/response storage with meta/payload split
 - `sectool/service/ids/ids.go` - Base62 random IDs using crypto/rand
 
 ### CLI Commands
@@ -168,9 +169,9 @@ type OastBackend interface {
 ```
 
 **Store Types (service/store/):**
-- `FlowStore`: Maps short flow_id → Burp offset with hash-based re-identification
-- `CrawlFlowStore`: Stores crawler flow data
-- `RequestStore`: Stores replay results with TTL cleanup
+- `Storage`: Key-value blob interface with `memStorage` and `SpillStore` (disk-paging) implementations
+- `ProxyIndex`: Bidirectional flow_id ↔ proxy history offset mapping
+- `ReplayHistoryStore`: Replay request/response storage with meta/payload split for efficient listing
 
 ## CLI Commands
 
