@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func setupMCPServerWithMock(t *testing.T) (*Server, *mcpclient.Client, *TestMCPS
 		BurpMCPURL:   mockMCP.URL(),
 		MCPPort:      0, // Let OS pick a port
 		WorkflowMode: WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}, nil, mockOast, mockCrawler)
 	require.NoError(t, err)
 

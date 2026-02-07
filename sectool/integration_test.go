@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,6 +77,7 @@ func setupIntegrationEnv(t *testing.T, backendType httpBackendType) *mcpclient.C
 			BurpMCPURL:   config.DefaultBurpMCPURL,
 			MCPPort:      findAvailablePort(t),
 			WorkflowMode: service.WorkflowModeNone,
+			ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 		}
 
 	case backendNative:
@@ -95,6 +97,7 @@ func setupIntegrationEnv(t *testing.T, backendType httpBackendType) *mcpclient.C
 		flags = service.MCPServerFlags{
 			MCPPort:      findAvailablePort(t),
 			WorkflowMode: service.WorkflowModeNone,
+			ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 		}
 	}
 
@@ -227,6 +230,7 @@ func runForAllBackendsWithHandler(t *testing.T, handler http.HandlerFunc, testFn
 			flags := service.MCPServerFlags{
 				MCPPort:      findAvailablePort(t),
 				WorkflowMode: service.WorkflowModeNone,
+				ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 			}
 			if backendType == backendBurp {
 				flags.RequireBurp = true
@@ -751,6 +755,7 @@ func TestIntegration_ReplayQueryModsVerified(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -1051,6 +1056,7 @@ func TestIntegration_HTTPSProxy(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -1774,6 +1780,7 @@ func TestIntegration_HTTP2Proxy(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -1875,6 +1882,7 @@ func TestIntegration_HTTP2Rules(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -2229,6 +2237,7 @@ func TestIntegration_ForceFlag(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -2354,6 +2363,7 @@ func TestIntegration_MalformedRequests(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -2598,6 +2608,7 @@ func TestIntegration_ContentLengthMismatch(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -3137,6 +3148,7 @@ func TestIntegration_WebSocketRules(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -3693,6 +3705,7 @@ func TestIntegration_HTTP2Replay(t *testing.T) {
 	flags := service.MCPServerFlags{
 		MCPPort:      findAvailablePort(t),
 		WorkflowMode: service.WorkflowModeNone,
+		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 	}
 	srv, err := service.NewServer(flags, backend, nil, nil)
 	require.NoError(t, err)
@@ -4108,6 +4121,7 @@ func TestIntegration_CompressedRequestBodyRule(t *testing.T) {
 		flags := service.MCPServerFlags{
 			MCPPort:      findAvailablePort(t),
 			WorkflowMode: service.WorkflowModeNone,
+			ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
 		}
 		srv, err := service.NewServer(flags, backend, nil, nil)
 		require.NoError(t, err)
