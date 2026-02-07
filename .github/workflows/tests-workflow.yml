@@ -47,5 +47,5 @@ jobs:
           go-version: ${{ matrix.go }}
 
       - name: Run unit tests
-        run: make test
+        run: make test-all
 
