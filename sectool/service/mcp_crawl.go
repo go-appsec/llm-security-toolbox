@@ -218,7 +218,7 @@ Output modes:
 - "errors": Returns errors encountered during crawling.
 
 Filters apply to summary and flows modes: host/path/exclude_host/exclude_path use glob (*, ?). method/status are comma-separated (status supports ranges like 2XX).
-Incremental (summary/flows): since accepts flow_id, timestamp, or "last". Flows mode only: pagination with limit/offset.`),
+Incremental (summary/flows): since accepts flow_id or "last" (cursor). Flows mode only: pagination with limit/offset.`),
 		mcp.WithString("session_id", mcp.Required(), mcp.Description("Session ID or label")),
 		mcp.WithString("output_mode", mcp.Description("Output mode: 'summary' (default), 'flows', 'forms', or 'errors'")),
 		mcp.WithString("host", mcp.Description("Filter by host glob pattern (e.g., '*.example.com')")),
@@ -229,7 +229,7 @@ Incremental (summary/flows): since accepts flow_id, timestamp, or "last". Flows 
 		mcp.WithString("contains_body", mcp.Description("Search in request/response body")),
 		mcp.WithString("exclude_host", mcp.Description("Exclude hosts matching glob pattern")),
 		mcp.WithString("exclude_path", mcp.Description("Exclude paths matching glob pattern")),
-		mcp.WithString("since", mcp.Description("flow_id, timestamp (RFC3339, '2006-01-02 15:04:05', '15:04:05'), or 'last' (cursor)")),
+		mcp.WithString("since", mcp.Description("flow_id or 'last' (cursor)")),
 		mcp.WithNumber("limit", mcp.Description("Maximum number of results (default: 100 for flows/forms/errors)")),
 		mcp.WithNumber("offset", mcp.Description("Skip first N results for pagination (flows mode)")),
 	)

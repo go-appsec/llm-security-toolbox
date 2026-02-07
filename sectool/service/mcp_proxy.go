@@ -30,7 +30,7 @@ Output modes:
 Sources: Results include both proxy-captured traffic (source=proxy) and replay-sent traffic (source=replay) in chronological order.
 Filters: host/path/exclude_host/exclude_path use glob (*, ?). method/status are comma-separated (status supports ranges like 2XX).
 Search: contains searches URL+headers; contains_body searches bodies.
-Incremental: since accepts flow_id or "last" (cursor). No timestamp support. Flows mode only: pagination with limit/offset.`),
+Incremental: since accepts flow_id or "last" (cursor). Flows mode only: pagination with limit/offset.`),
 		mcp.WithString("output_mode", mcp.Description("Output mode: 'summary' (default) or 'flows'")),
 		mcp.WithString("source", mcp.Description("Filter by source: 'proxy', 'replay', or empty for both")),
 		mcp.WithString("host", mcp.Description("Filter by host (glob pattern, e.g., '*.example.com')")),
@@ -39,7 +39,7 @@ Incremental: since accepts flow_id or "last" (cursor). No timestamp support. Flo
 		mcp.WithString("status", mcp.Description("Filter by status code(s) or ranges (e.g., '200,302' or '2XX,4XX')")),
 		mcp.WithString("contains", mcp.Description("Filter by text in URL or headers (does not search body)")),
 		mcp.WithString("contains_body", mcp.Description("Filter by text in request or response body")),
-		mcp.WithString("since", mcp.Description("Entries after flow_id, or 'last' (cursor). No timestamp support.")),
+		mcp.WithString("since", mcp.Description("Entries after flow_id, or 'last' (cursor)")),
 		mcp.WithString("exclude_host", mcp.Description("Exclude hosts matching glob pattern")),
 		mcp.WithString("exclude_path", mcp.Description("Exclude paths matching glob pattern")),
 		mcp.WithNumber("limit", mcp.Description("List mode: max results to return")),

@@ -35,13 +35,13 @@ Output modes:
 Options:
 - Immediate: omit wait
 - Long-poll: set wait (e.g., '30s', max 120s)
-- Incremental: use since parameter, accepts event_id, timestamp, or "last"
+- Incremental: use since parameter, accepts event_id or "last"
 - Filter by type: dns, http, smtp, ftp, ldap, smb, responder
 
 Response includes events/aggregates and optional dropped_count; use oast_get for full event details.`),
 		mcp.WithString("oast_id", mcp.Required(), mcp.Description("OAST session ID, label, or domain")),
 		mcp.WithString("output_mode", mcp.Description("Output mode: 'summary' (default) or 'events'")),
-		mcp.WithString("since", mcp.Description("event_id, timestamp (e.g., RFC3339, '2006-01-02 15:04:05', '15:04:05'), or 'last' (per-session cursor)")),
+		mcp.WithString("since", mcp.Description("event_id or 'last' (per-session cursor)")),
 		mcp.WithString("type", mcp.Description("Filter by event type: dns, http, smtp, ftp, ldap, smb, responder")),
 		mcp.WithString("wait", mcp.Description("Long-poll duration (e.g., '30s', max 120s)")),
 		mcp.WithNumber("limit", mcp.Description("Maximum number of events to return")),
