@@ -72,11 +72,13 @@ func NewNativeProxyBackend(port int, configDir string, maxBodyBytes int, history
 	}
 
 	// Load persisted rules
-	b.httpRules = b.loadRuleList(ruleKeyHTTP)
-	b.wsRules = b.loadRuleList(ruleKeyWS)
+	if b.httpRules, err = b.loadRuleList(ruleKeyHTTP); err != nil {
+		return nil, fmt.Errorf("load HTTP rules: %w", err)
+	} else if b.wsRules, err = b.loadRuleList(ruleKeyWS); err != nil {
+		return nil, fmt.Errorf("load WebSocket rules: %w", err)
+	}
 
-	// Wire backend as rule applier for the proxy handlers
-	server.SetRuleApplier(b)
+	server.SetRuleApplier(b) // Wire backend as rule applier for the proxy handlers
 
 	return b, nil
 }
@@ -96,23 +98,26 @@ func (b *NativeProxyBackend) WaitReady(ctx context.Context) error {
 	return b.server.WaitReady(ctx)
 }
 
-func (b *NativeProxyBackend) loadRuleList(key string) []nativeStoredRule {
+func (b *NativeProxyBackend) loadRuleList(key string) ([]nativeStoredRule, error) {
 	data, found, err := b.ruleStorage.Get(key)
-	if err != nil || !found {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("load rules %s: %w", key, err)
+	} else if !found {
+		return nil, nil
 	}
 	var rules []nativeStoredRule
 	if err := store.Deserialize(data, &rules); err != nil {
-		log.Printf("native: failed to load rules %s: %v", key, err)
-		return nil
+		return nil, fmt.Errorf("deserialize rules %s: %w", key, err)
 	}
 	// Recompile regexes
 	for i := range rules {
 		if rules[i].IsRegex {
-			rules[i].compiled, _ = regexp.Compile(rules[i].Match)
+			if rules[i].compiled, err = regexp.Compile(rules[i].Match); err != nil {
+				return nil, fmt.Errorf("invalid stored regex in rule %s (match=%q): %w", rules[i].ID, rules[i].Match, err)
+			}
 		}
 	}
-	return rules
+	return rules, nil
 }
 
 // saveRules writes the rule list to storage. Caller must hold rulesMu.
@@ -258,7 +263,6 @@ func (b *NativeProxyBackend) AddRule(ctx context.Context, input ProxyRuleInput) 
 
 	isRegex := input.IsRegex != nil && *input.IsRegex
 
-	// Pre-compile regex if needed
 	var compiled *regexp.Regexp
 	if isRegex {
 		var err error

@@ -30,7 +30,7 @@ var ErrClosed = errors.New("storage closed")
 
 // SpillStoreConfig configures spillStore behavior.
 type SpillStoreConfig struct {
-	TempDir             string  // optional, auto-created if empty
+	Dir                 string  // optional, auto-created if empty
 	FilePrefix          string  // optional prefix for data file name (e.g. "hist" → "hist.spill.bin")
 	MaxHotBytes         int64   // max value bytes in hot cache
 	EvictTargetRatio    float64 // evict to this ratio, higher values evict less
@@ -99,13 +99,12 @@ type spillStore struct {
 
 // NewSpillStore creates a new spillStore with the given config.
 func NewSpillStore(cfg SpillStoreConfig) (Storage, error) {
-	// Create temp directory
-	tempDir := cfg.TempDir
+	// Setup working directory
+	tempDir := cfg.Dir
 	var ownsDataDir bool
 	if tempDir == "" {
 		var err error
-		tempDir, err = os.MkdirTemp("", "sectool-spill-*")
-		if err != nil {
+		if tempDir, err = os.MkdirTemp("", "sectool-spill-*"); err != nil {
 			return nil, err
 		}
 		ownsDataDir = true
@@ -115,7 +114,7 @@ func NewSpillStore(cfg SpillStoreConfig) (Storage, error) {
 		}
 	}
 
-	// Generate ephemeral encryption key (unless disabled)
+	// Generate ephemeral encryption key
 	encKey := make([]byte, 32)
 	if _, err := rand.Read(encKey); err != nil {
 		_ = os.RemoveAll(tempDir)

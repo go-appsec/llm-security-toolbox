@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -26,6 +25,7 @@ func TestNewCertManager(t *testing.T) {
 		cm, err := newCertManager(tempDir)
 		require.NoError(t, err)
 		require.NotNil(t, cm)
+		t.Cleanup(func() { _ = cm.Close() })
 
 		certPath := filepath.Join(tempDir, "ca.pem")
 		keyPath := filepath.Join(tempDir, "ca-key.pem")
@@ -46,9 +46,11 @@ func TestNewCertManager(t *testing.T) {
 		cm1, err := newCertManager(tempDir)
 		require.NoError(t, err)
 		caCert1 := cm1.CACert()
+		_ = cm1.Close()
 
 		cm2, err := newCertManager(tempDir)
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = cm2.Close() })
 		caCert2 := cm2.CACert()
 
 		assert.Equal(t, caCert1.Raw, caCert2.Raw)
@@ -96,7 +98,7 @@ func TestNewCertManager(t *testing.T) {
 		// First generate valid CA to get a valid cert
 		cm, err := newCertManager(tempDir)
 		require.NoError(t, err)
-		_ = cm
+		_ = cm.Close()
 
 		// Overwrite key with invalid PEM
 		err = os.WriteFile(filepath.Join(tempDir, "ca-key.pem"), []byte("not a valid pem"), 0600)
@@ -134,6 +136,7 @@ func TestNewCertManager(t *testing.T) {
 		// Generate a leaf certificate (not CA)
 		leafCert, err := cm.GetCertificate("example.com")
 		require.NoError(t, err)
+		_ = cm.Close()
 
 		// Overwrite CA cert with leaf cert
 		leafCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafCert.Certificate[0]})
@@ -165,6 +168,7 @@ func TestNewCertManager(t *testing.T) {
 
 		expiredCertDER, err := x509.CreateCertificate(rand.Reader, expiredTemplate, expiredTemplate, cm.caKey.Public(), cm.caKey)
 		require.NoError(t, err)
+		_ = cm.Close()
 
 		expiredCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: expiredCertDER})
 		err = os.WriteFile(filepath.Join(tempDir, "ca.pem"), expiredCertPEM, 0644)
@@ -195,6 +199,7 @@ func TestNewCertManager(t *testing.T) {
 
 		badCertDER, err := x509.CreateCertificate(rand.Reader, badTemplate, badTemplate, cm.caKey.Public(), cm.caKey)
 		require.NoError(t, err)
+		_ = cm.Close()
 
 		badCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: badCertDER})
 		err = os.WriteFile(filepath.Join(tempDir, "ca.pem"), badCertPEM, 0644)
@@ -212,6 +217,7 @@ func TestGetCertificate(t *testing.T) {
 	tempDir := t.TempDir()
 	cm, err := newCertManager(tempDir)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = cm.Close() })
 
 	t.Run("hostname_cert", func(t *testing.T) {
 		cert, err := cm.GetCertificate("example.com")
@@ -234,7 +240,8 @@ func TestGetCertificate(t *testing.T) {
 		cert2, err := cm.GetCertificate("cached.example.com")
 		require.NoError(t, err)
 
-		assert.Equal(t, cert1, cert2)
+		// Compare DER bytes (deserialized copies won't be pointer-equal)
+		assert.Equal(t, cert1.Certificate, cert2.Certificate)
 	})
 
 	t.Run("ip_address_cert", func(t *testing.T) {
@@ -352,33 +359,33 @@ func TestGetCertificate(t *testing.T) {
 		const hostname = "concurrent.example.com"
 		const goroutines = 10
 
-		results := make(chan *tls.Certificate, goroutines)
-		errors := make(chan error, goroutines)
+		type result struct {
+			certDER [][]byte
+			err     error
+		}
+		results := make(chan result, goroutines)
 
 		for i := 0; i < goroutines; i++ {
 			go func() {
 				cert, err := cm.GetCertificate(hostname)
 				if err != nil {
-					errors <- err
+					results <- result{err: err}
 					return
 				}
-				results <- cert
+				results <- result{certDER: cert.Certificate}
 			}()
 		}
 
-		var certs []*tls.Certificate
+		var certs [][][]byte
 		for i := 0; i < goroutines; i++ {
-			select {
-			case cert := <-results:
-				certs = append(certs, cert)
-			case err := <-errors:
-				t.Fatalf("unexpected error: %v", err)
-			}
+			r := <-results
+			require.NoError(t, r.err)
+			certs = append(certs, r.certDER)
 		}
 
-		// All should return the same cached certificate
-		for _, cert := range certs[1:] {
-			assert.Equal(t, certs[0], cert)
+		// All should return the same certificate chain
+		for _, certDER := range certs[1:] {
+			assert.Equal(t, certs[0], certDER)
 		}
 	})
 
@@ -390,7 +397,7 @@ func TestGetCertificate(t *testing.T) {
 		}
 
 		var wg sync.WaitGroup
-		results := make([]*tls.Certificate, goroutines)
+		certDERs := make([][][]byte, goroutines)
 		errors := make([]error, goroutines)
 
 		for i := 0; i < goroutines; i++ {
@@ -402,7 +409,7 @@ func TestGetCertificate(t *testing.T) {
 					errors[idx] = err
 					return
 				}
-				results[idx] = cert
+				certDERs[idx] = cert.Certificate
 			}(i)
 		}
 
@@ -411,9 +418,9 @@ func TestGetCertificate(t *testing.T) {
 		// All should succeed with unique certs
 		for i := 0; i < goroutines; i++ {
 			require.NoError(t, errors[i])
-			require.NotNil(t, results[i])
+			require.NotNil(t, certDERs[i])
 
-			x509Cert, err := x509.ParseCertificate(results[i].Certificate[0])
+			x509Cert, err := x509.ParseCertificate(certDERs[i][0])
 			require.NoError(t, err)
 			assert.Equal(t, hostnames[i], x509Cert.Subject.CommonName)
 		}
@@ -470,6 +477,7 @@ func TestCACert(t *testing.T) {
 	tempDir := t.TempDir()
 	cm, err := newCertManager(tempDir)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = cm.Close() })
 
 	caCert := cm.CACert()
 	require.NotNil(t, caCert)
@@ -498,6 +506,7 @@ func TestCACertConcurrentReads(t *testing.T) {
 	tempDir := t.TempDir()
 	cm, err := newCertManager(tempDir)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = cm.Close() })
 
 	const goroutines = 20
 	var wg sync.WaitGroup

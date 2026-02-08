@@ -224,5 +224,5 @@ func (s *ProxyServer) Shutdown(ctx context.Context) error {
 	}
 
 	s.history.Close()
-	return nil
+	return s.certManager.Close()
 }

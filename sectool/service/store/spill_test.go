@@ -206,7 +206,7 @@ func TestSpillStore(t *testing.T) {
 			EvictTargetRatio:    0.7,
 			CompactionThreshold: 1024 * 1024,
 			ZSTDLevel:           1,
-			TempDir:             customDir,
+			Dir:                 customDir,
 		}
 
 		s, err := newSpillStore(cfg)

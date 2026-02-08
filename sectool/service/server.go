@@ -90,7 +90,7 @@ func NewServer(flags MCPServerFlags, hb HttpBackend, ob OastBackend, cb CrawlerB
 
 	// Create per-store spill instances sharing the same temp directory
 	defaults := store.DefaultSpillStoreConfig()
-	defaults.TempDir = storageTempDir
+	defaults.Dir = storageTempDir
 	storeNames := []string{"pidx", "replay", "hist", "rule"}
 	stores := make([]store.Storage, len(storeNames))
 	for i, name := range storeNames {

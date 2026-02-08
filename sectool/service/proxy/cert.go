@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/go-appsec/llm-security-toolbox/sectool/service/store"
 )
 
 const (
@@ -24,25 +26,36 @@ const (
 	caKeyFile  = "ca-key.pem"
 )
 
+// certCacheEntry is the serializable form of a tls.Certificate for SpillStore.
+type certCacheEntry struct {
+	CertChain  [][]byte `msgpack:"c"`
+	PrivateKey []byte   `msgpack:"k"` // PKCS8 DER
+}
+
 // CertManager handles CA certificate loading/generation and on-demand
 // certificate generation for HTTPS MITM interception.
 type CertManager struct {
-	mu     sync.RWMutex
+	mu     sync.Mutex
 	caCert *x509.Certificate
 	caKey  crypto.Signer // supports RSA, ECDSA, and Ed25519 keys
 
 	// cache stores generated certificates by hostname
-	cache map[string]*tls.Certificate // TODO - Consider adding a size limit or LRU eviction
+	cache store.Storage
 }
 
 // newCertManager loads or generates a CA certificate.
 // configDir is the directory for CA files (typically ~/.sectool).
 func newCertManager(configDir string) (*CertManager, error) {
+	cache, err := store.NewSpillStore(store.DefaultSpillStoreConfig())
+	if err != nil {
+		return nil, fmt.Errorf("create cert cache: %w", err)
+	}
 	m := &CertManager{
-		cache: make(map[string]*tls.Certificate),
+		cache: cache,
 	}
 
 	if err := m.loadOrGenerateCA(configDir); err != nil {
+		_ = cache.Close()
 		return nil, err
 	}
 
@@ -52,38 +65,89 @@ func newCertManager(configDir string) (*CertManager, error) {
 // GetCertificate returns a certificate for the hostname.
 // Generates and caches if not already cached.
 func (m *CertManager) GetCertificate(hostname string) (*tls.Certificate, error) {
-	// Fast path: check cache under read lock
-	m.mu.RLock()
-	if cert, ok := m.cache[hostname]; ok {
-		m.mu.RUnlock()
+	// Fast path: check cache (SpillStore is thread-safe)
+	cert, err := m.getCachedCert(hostname)
+	if err != nil {
+		return nil, err
+	} else if cert != nil {
 		return cert, nil
 	}
-	m.mu.RUnlock()
 
-	// Slow path: generate under write lock
+	// Slow path: generate under lock to avoid duplicate generation
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Double-check after acquiring write lock
-	if cert, ok := m.cache[hostname]; ok {
+	// Double-check after acquiring lock
+	cert, err = m.getCachedCert(hostname)
+	if err != nil {
+		return nil, err
+	} else if cert != nil {
 		return cert, nil
 	}
 
-	cert, err := m.generateCertificate(hostname)
+	cert, err = m.generateCertificate(hostname)
 	if err != nil {
 		return nil, fmt.Errorf("generate certificate for %s: %w", hostname, err)
+	} else if err := m.storeCert(hostname, cert); err != nil {
+		return nil, fmt.Errorf("cache certificate for %s: %w", hostname, err)
 	}
-
-	m.cache[hostname] = cert
 	return cert, nil
 }
 
 // CACert returns the CA certificate for clients to trust.
 func (m *CertManager) CACert() *x509.Certificate {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	return m.caCert
+}
+
+// Close releases resources held by the cert cache.
+func (m *CertManager) Close() error {
+	return m.cache.Close()
+}
+
+// getCachedCert retrieves a certificate from the SpillStore cache.
+func (m *CertManager) getCachedCert(hostname string) (*tls.Certificate, error) {
+	data, found, err := m.cache.Get(hostname)
+	if err != nil {
+		return nil, fmt.Errorf("cert cache get: %w", err)
+	} else if !found {
+		return nil, nil
+	}
+	return deserializeCert(data)
+}
+
+// storeCert serializes and stores a certificate in the SpillStore cache.
+func (m *CertManager) storeCert(hostname string, cert *tls.Certificate) error {
+	data, err := serializeCert(cert)
+	if err != nil {
+		return err
+	}
+	return m.cache.Set(hostname, data)
+}
+
+func serializeCert(cert *tls.Certificate) ([]byte, error) {
+	privKeyBytes, err := x509.MarshalPKCS8PrivateKey(cert.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal private key: %w", err)
+	}
+	return store.Serialize(certCacheEntry{
+		CertChain:  cert.Certificate,
+		PrivateKey: privKeyBytes,
+	})
+}
+
+func deserializeCert(data []byte) (*tls.Certificate, error) {
+	var entry certCacheEntry
+	if err := store.Deserialize(data, &entry); err != nil {
+		return nil, fmt.Errorf("deserialize cert: %w", err)
+	}
+	privKey, err := x509.ParsePKCS8PrivateKey(entry.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("parse cached private key: %w", err)
+	}
+	return &tls.Certificate{
+		Certificate: entry.CertChain,
+		PrivateKey:  privKey,
+	}, nil
 }
 
 // loadOrGenerateCA loads existing CA or generates a new one.
