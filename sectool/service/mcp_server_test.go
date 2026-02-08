@@ -12,24 +12,51 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/go-appsec/llm-security-toolbox/sectool/config"
 )
 
 // Unit tests for MCP server functionality using mock backends.
 // Integration tests that require Burp Suite are in integration_test.go.
 
-// setupMCPServerWithMock creates an MCP server with mock backends for unit testing.
-func setupMCPServerWithMock(t *testing.T) (*Server, *mcpclient.Client, *TestMCPServer, *mockOastBackend, *mockCrawlerBackend) {
+// setupMockMCPServer creates an MCP server with mock backends for unit testing.
+func setupMockMCPServer(t *testing.T) (*Server, *mcpclient.Client, *TestMCPServer, *mockOastBackend, *mockCrawlerBackend) {
+	t.Helper()
+	return setupMockMCPServerWithConfig(t, nil)
+}
+
+// setupMockMCPServerWithConfig creates an MCP server with mock backends and a
+// pre-written config file. Fields set on cfg are merged onto the defaults so
+// the server loads them before any handler runs (no post-start mutation).
+func setupMockMCPServerWithConfig(t *testing.T, cfg *config.Config) (*Server, *mcpclient.Client, *TestMCPServer, *mockOastBackend, *mockCrawlerBackend) {
 	t.Helper()
 
 	mockMCP := NewTestMCPServer(t)
 	mockOast := newMockOastBackend()
 	mockCrawler := newMockCrawlerBackend()
 
+	configPath := filepath.Join(t.TempDir(), "config.json")
+
+	// Pre-write config so the server loads it at startup
+	if cfg != nil {
+		defaults := config.DefaultConfig()
+		if cfg.AllowedDomains != nil {
+			defaults.AllowedDomains = cfg.AllowedDomains
+		}
+		if cfg.ExcludeDomains != nil {
+			defaults.ExcludeDomains = cfg.ExcludeDomains
+		}
+		if cfg.IncludeSubdomains != nil {
+			defaults.IncludeSubdomains = cfg.IncludeSubdomains
+		}
+		require.NoError(t, defaults.Save(configPath))
+	}
+
 	srv, err := NewServer(MCPServerFlags{
 		BurpMCPURL:   mockMCP.URL(),
 		MCPPort:      0, // Let OS pick a port
 		WorkflowMode: WorkflowModeNone,
-		ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
+		ConfigPath:   configPath,
 	}, nil, mockOast, mockCrawler)
 	require.NoError(t, err)
 
@@ -71,7 +98,7 @@ func setupMCPServerWithMock(t *testing.T) (*Server, *mcpclient.Client, *TestMCPS
 func TestMCP_ListTools(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)

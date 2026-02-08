@@ -37,7 +37,6 @@ The crawler automatically:
 		mcp.WithNumber("max_requests", mcp.Description("Maximum total requests (0 = unlimited)")),
 		mcp.WithString("delay", mcp.Description("Delay between requests (e.g., '200ms', '1s')")),
 		mcp.WithNumber("parallelism", mcp.Description("Number of concurrent requests (default: 2)")),
-		mcp.WithBoolean("include_subdomains", mcp.Description("Include subdomains of seed hosts (default: true)")),
 		mcp.WithBoolean("ignore_robots", mcp.Description("Ignore robots.txt restrictions (default: false)")),
 	)
 }
@@ -76,25 +75,15 @@ func (m *mcpServer) handleCrawlCreate(ctx context.Context, req mcp.CallToolReque
 		delay = parsed
 	}
 
-	includeSubdomains := true
-	if args := req.GetArguments(); args != nil {
-		if v, ok := args["include_subdomains"]; ok {
-			if b, ok := v.(bool); ok {
-				includeSubdomains = b
-			}
-		}
-	}
-
 	opts := CrawlOptions{
-		Label:             req.GetString("label", ""),
-		Seeds:             seeds,
-		ExplicitDomains:   domains,
-		IncludeSubdomains: includeSubdomains,
-		MaxDepth:          req.GetInt("max_depth", 0),
-		MaxRequests:       req.GetInt("max_requests", 0),
-		Delay:             delay,
-		Parallelism:       req.GetInt("parallelism", 0),
-		IgnoreRobotsTxt:   req.GetBool("ignore_robots", false),
+		Label:           req.GetString("label", ""),
+		Seeds:           seeds,
+		ExplicitDomains: domains,
+		MaxDepth:        req.GetInt("max_depth", 0),
+		MaxRequests:     req.GetInt("max_requests", 0),
+		Delay:           delay,
+		Parallelism:     req.GetInt("parallelism", 0),
+		IgnoreRobotsTxt: req.GetBool("ignore_robots", false),
 		// SubmitForms and ExtractForms left unset to use config defaults
 	}
 

@@ -17,7 +17,7 @@ import (
 	"github.com/go-appsec/llm-security-toolbox/sectool/protocol"
 )
 
-func create(mcpURL string, timeout time.Duration, urls, flows, domains []string, label string, maxDepth, maxRequests int, delay time.Duration, parallelism int, includeSubdomains, submitForms, ignoreRobots bool) error {
+func create(mcpURL string, timeout time.Duration, urls, flows, domains []string, label string, maxDepth, maxRequests int, delay time.Duration, parallelism int, submitForms, ignoreRobots bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -27,28 +27,22 @@ func create(mcpURL string, timeout time.Duration, urls, flows, domains []string,
 	}
 	defer func() { _ = client.Close() }()
 
-	var includeSubdomainsPtr *bool
-	if !includeSubdomains {
-		includeSubdomainsPtr = &includeSubdomains
-	}
-
 	var delayStr string
 	if delay > 0 {
 		delayStr = delay.String()
 	}
 
 	resp, err := client.CrawlCreate(ctx, mcpclient.CrawlCreateOpts{
-		Label:             label,
-		SeedURLs:          strings.Join(urls, ","),
-		SeedFlows:         strings.Join(flows, ","),
-		Domains:           strings.Join(domains, ","),
-		MaxDepth:          maxDepth,
-		MaxRequests:       maxRequests,
-		Delay:             delayStr,
-		Parallelism:       parallelism,
-		IncludeSubdomains: includeSubdomainsPtr,
-		SubmitForms:       submitForms,
-		IgnoreRobots:      ignoreRobots,
+		Label:        label,
+		SeedURLs:     strings.Join(urls, ","),
+		SeedFlows:    strings.Join(flows, ","),
+		Domains:      strings.Join(domains, ","),
+		MaxDepth:     maxDepth,
+		MaxRequests:  maxRequests,
+		Delay:        delayStr,
+		Parallelism:  parallelism,
+		SubmitForms:  submitForms,
+		IgnoreRobots: ignoreRobots,
 	})
 	if err != nil {
 		return fmt.Errorf("crawl create failed: %w", err)

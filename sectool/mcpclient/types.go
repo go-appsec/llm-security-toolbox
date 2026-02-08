@@ -78,18 +78,17 @@ type RequestSendOpts struct {
 
 // CrawlCreateOpts are options for CrawlCreate.
 type CrawlCreateOpts struct {
-	Label             string
-	SeedURLs          string
-	SeedFlows         string
-	Domains           string
-	Headers           map[string]string
-	MaxDepth          int
-	MaxRequests       int
-	Delay             string
-	Parallelism       int
-	IncludeSubdomains *bool
-	SubmitForms       bool
-	IgnoreRobots      bool
+	Label        string
+	SeedURLs     string
+	SeedFlows    string
+	Domains      string
+	Headers      map[string]string
+	MaxDepth     int
+	MaxRequests  int
+	Delay        string
+	Parallelism  int
+	SubmitForms  bool
+	IgnoreRobots bool
 }
 
 // CrawlPollOpts are options for CrawlPoll.

@@ -113,9 +113,10 @@ Global config at `~/.sectool/config.json` (auto-created with defaults):
   "mcp_port": 9119,
   "burp_required": false,
   "max_body_bytes": 10485760,
+  "include_subdomains": true,
+  "allowed_domains": [],
+  "exclude_domains": [],
   "crawler": {
-    "max_response_body_bytes": 1048576,
-    "include_subdomains": true,
     "disallowed_paths": ["*logout*", "*signout*", "*sign-out*", "*delete*", "*remove*"],
     "delay_ms": 200,
     "parallelism": 2,
@@ -127,6 +128,11 @@ Global config at `~/.sectool/config.json` (auto-created with defaults):
   }
 }
 ```
+
+Domain scoping rules:
+- `exclude_domains`: always takes precedence, always matches subdomains
+- `allowed_domains`: strict allowlist when non-empty; respects `include_subdomains` for subdomain matching
+- Neither configured: no restriction (default)
 
 ### Export Bundle Layout
 

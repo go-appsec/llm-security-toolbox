@@ -14,7 +14,7 @@ import (
 func TestMCP_OastLifecycleWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, mockOast, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, mockOast, _ := setupMockMCPServer(t)
 
 	var oastID string
 
@@ -129,7 +129,7 @@ func TestMCP_OastLifecycleWithMock(t *testing.T) {
 func TestMCP_OastValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("create_duplicate_label", func(t *testing.T) {
 		// First session with label

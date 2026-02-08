@@ -73,7 +73,6 @@ crawl create [options]
     --max-requests <n>     maximum total requests (0 = unlimited)
     --delay <dur>          delay between requests (default: 200ms)
     --parallelism <n>      concurrent requests (default: 2)
-    --no-subdomains        don't include subdomains
     --submit-forms         automatically submit discovered forms
     --ignore-robots        ignore robots.txt restrictions
 
@@ -187,7 +186,7 @@ func parseCreate(args []string, mcpURL string) error {
 	var urls, flows, domains []string
 	var label string
 	var maxDepth, maxRequests, parallelism int
-	var noSubdomains, submitForms, ignoreRobots bool
+	var submitForms, ignoreRobots bool
 
 	fs.DurationVar(&timeout, "timeout", 30*time.Second, "client-side timeout")
 	fs.StringArrayVar(&urls, "url", nil, "seed URL (can specify multiple times)")
@@ -198,7 +197,6 @@ func parseCreate(args []string, mcpURL string) error {
 	fs.IntVar(&maxRequests, "max-requests", 0, "maximum total requests (0 = unlimited)")
 	fs.DurationVar(&delay, "delay", 0, "delay between requests")
 	fs.IntVar(&parallelism, "parallelism", 0, "concurrent requests")
-	fs.BoolVar(&noSubdomains, "no-subdomains", false, "don't include subdomains")
 	fs.BoolVar(&submitForms, "submit-forms", false, "automatically submit discovered forms")
 	fs.BoolVar(&ignoreRobots, "ignore-robots", false, "ignore robots.txt restrictions")
 
@@ -221,7 +219,7 @@ Options:
 		return errors.New("at least one --url or --flow is required")
 	}
 
-	return create(mcpURL, timeout, urls, flows, domains, label, maxDepth, maxRequests, delay, parallelism, !noSubdomains, submitForms, ignoreRobots)
+	return create(mcpURL, timeout, urls, flows, domains, label, maxDepth, maxRequests, delay, parallelism, submitForms, ignoreRobots)
 }
 
 func parseSeed(args []string, mcpURL string) error {

@@ -227,21 +227,20 @@ type CrawlerBackend interface {
 
 // CrawlOptions contains parameters for creating a crawl session.
 type CrawlOptions struct {
-	Label             string            // Optional unique label for the session
-	Seeds             []CrawlSeed       // Initial seeds (URLs and/or flow IDs)
-	ExplicitDomains   []string          // User-specified via --domain
-	AllowedPaths      []string          // Glob patterns (default: all)
-	DisallowedPaths   []string          // Glob patterns (default from config)
-	IncludeSubdomains bool              // Default: true
-	MaxDepth          int               // 0 = unlimited
-	MaxRequests       int               // 0 = unlimited
-	Delay             time.Duration     // Default: 200ms
-	RandomDelay       time.Duration     // Additional random jitter
-	Parallelism       int               // Default: 2
-	IgnoreRobotsTxt   bool              // Default: false
-	SubmitForms       bool              // Default: false
-	ExtractForms      *bool             // Default: true (from config)
-	Headers           map[string]string // Custom headers
+	Label           string            // Optional unique label for the session
+	Seeds           []CrawlSeed       // Initial seeds (URLs and/or flow IDs)
+	ExplicitDomains []string          // User-specified via --domain
+	AllowedPaths    []string          // Glob patterns (default: all)
+	DisallowedPaths []string          // Glob patterns (default from config)
+	MaxDepth        int               // 0 = unlimited
+	MaxRequests     int               // 0 = unlimited
+	Delay           time.Duration     // Default: 200ms
+	RandomDelay     time.Duration     // Additional random jitter
+	Parallelism     int               // Default: 2
+	IgnoreRobotsTxt bool              // Default: false
+	SubmitForms     bool              // Default: false
+	ExtractForms    *bool             // Default: true (from config)
+	Headers         map[string]string // Custom headers
 }
 
 // CrawlSeed represents a seed for starting a crawl.

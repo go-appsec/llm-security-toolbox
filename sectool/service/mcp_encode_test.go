@@ -9,7 +9,7 @@ import (
 func TestMCP_EncodeURL(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("encode", func(t *testing.T) {
 		text := CallMCPToolTextOK(t, mcpClient, "encode_url", map[string]interface{}{
@@ -39,7 +39,7 @@ func TestMCP_EncodeURL(t *testing.T) {
 func TestMCP_EncodeBase64(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("encode", func(t *testing.T) {
 		text := CallMCPToolTextOK(t, mcpClient, "encode_base64", map[string]interface{}{
@@ -69,7 +69,7 @@ func TestMCP_EncodeBase64(t *testing.T) {
 func TestMCP_EncodeHTML(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("encode", func(t *testing.T) {
 		text := CallMCPToolTextOK(t, mcpClient, "encode_html", map[string]interface{}{
@@ -90,7 +90,7 @@ func TestMCP_EncodeHTML(t *testing.T) {
 func TestMCP_EncodeValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	cases := []struct {
 		name string

@@ -14,7 +14,7 @@ import (
 func TestMCP_ProxySummaryWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.AddProxyEntry(
 		"GET /api/users HTTP/1.1\r\nHost: example.com\r\n\r\n",
@@ -124,7 +124,7 @@ func TestMCP_ProxySummaryWithMock(t *testing.T) {
 func TestMCP_ProxyListWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 	mockMCP.AddProxyEntry(
 		"GET /api/data HTTP/1.1\r\nHost: test.com\r\nX-Custom: searchme\r\n\r\n",
 		"HTTP/1.1 200 OK\r\n\r\nresponse body with findme",
@@ -201,7 +201,7 @@ func TestMCP_ProxyListWithMock(t *testing.T) {
 func TestMCP_ProxyListWithLimit(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	for i := 0; i < 5; i++ {
 		mockMCP.AddProxyEntry(
@@ -280,7 +280,7 @@ func TestMCP_ProxyListWithLimit(t *testing.T) {
 func TestMCP_ProxyGetWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.AddProxyEntry(
 		"GET /api/test HTTP/1.1\r\nHost: mock.example.com\r\n\r\n",
@@ -320,7 +320,7 @@ func TestMCP_ProxyGetWithMock(t *testing.T) {
 func TestMCP_ProxyRulesCRUDWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	var ruleID string
 
@@ -411,7 +411,7 @@ func TestMCP_ProxyRulesCRUDWithMock(t *testing.T) {
 func TestMCP_ProxyListRequiresFilters(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	// List mode requires at least one filter
 	result := CallMCPTool(t, mcpClient, "proxy_poll", map[string]interface{}{
@@ -423,7 +423,7 @@ func TestMCP_ProxyListRequiresFilters(t *testing.T) {
 func TestMCP_ProxyGetValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("missing_flow_id", func(t *testing.T) {
 		result := CallMCPTool(t, mcpClient, "proxy_get", map[string]interface{}{})
@@ -443,7 +443,7 @@ func TestMCP_ProxyGetValidation(t *testing.T) {
 func TestMCP_ProxyGetFullBodyReturnsBase64(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Add entry with uncompressed response (test full_body returns base64)
 	mockMCP.AddProxyEntry(
@@ -483,7 +483,7 @@ func TestMCP_ProxyGetFullBodyReturnsBase64(t *testing.T) {
 func TestMCP_ProxyRuleValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, _, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
 
 	t.Run("add_missing_type", func(t *testing.T) {
 		result := CallMCPTool(t, mcpClient, "proxy_rule_add", map[string]interface{}{

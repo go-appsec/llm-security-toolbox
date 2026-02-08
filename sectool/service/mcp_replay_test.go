@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/go-appsec/llm-security-toolbox/sectool/config"
 	"github.com/go-appsec/llm-security-toolbox/sectool/protocol"
 )
 
 func TestMCP_ReplayWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.AddProxyEntry(
 		"GET /replay-test HTTP/1.1\r\nHost: mock.test\r\n\r\n",
@@ -55,7 +56,7 @@ func TestMCP_ReplayWithMock(t *testing.T) {
 func TestMCP_RequestSendWithMock(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.SetSendResponse(
 		"HttpRequestResponse{httpRequest=GET /test HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}}",
@@ -112,7 +113,7 @@ func TestMCP_RequestSendWithMock(t *testing.T) {
 func TestMCP_RequestSendValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	t.Run("missing_url", func(t *testing.T) {
 		result := CallMCPTool(t, mcpClient, "request_send", map[string]interface{}{
@@ -153,7 +154,7 @@ func TestMCP_RequestSendValidation(t *testing.T) {
 func TestMCP_ReplayValidation(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, mockCrawler := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, mockCrawler := setupMockMCPServer(t)
 
 	t.Run("missing_flow_id", func(t *testing.T) {
 		result := CallMCPTool(t, mcpClient, "replay_send", map[string]interface{}{})
@@ -239,7 +240,7 @@ func TestMCP_ReplayValidation(t *testing.T) {
 func TestMCP_ReplaySendModifications(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.AddProxyEntry(
 		"POST /api/users HTTP/1.1\r\nHost: original.test\r\nContent-Type: application/json\r\nX-Remove-Me: value\r\n\r\n{\"name\":\"test\",\"temp\":\"remove\"}",
@@ -309,7 +310,7 @@ func TestMCP_ReplaySendModifications(t *testing.T) {
 func TestMCP_ReplayGetFullBodyReturnsBase64(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Add proxy entry
 	mockMCP.AddProxyEntry(
@@ -356,7 +357,7 @@ func TestMCP_ReplayGetFullBodyReturnsBase64(t *testing.T) {
 func TestMCP_ReplaySendCompressesBodyWhenModified(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Add proxy entry with Content-Encoding: gzip header
 	mockMCP.AddProxyEntry(
@@ -405,7 +406,7 @@ func TestMCP_ReplaySendCompressesBodyWhenModified(t *testing.T) {
 func TestMCP_ReplaySendNoCompressionWhenBodyUnmodified(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	const originalBody = "original body unchanged"
 	mockMCP.AddProxyEntry(
@@ -440,7 +441,7 @@ func TestMCP_ReplaySendNoCompressionWhenBodyUnmodified(t *testing.T) {
 func TestMCP_ReplaySendSetJSONTriggersCompression(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Original JSON body (stored uncompressed, but request has Content-Encoding: gzip)
 	const originalJSON = `{"key":"value"}`
@@ -481,7 +482,7 @@ func TestMCP_ReplaySendSetJSONTriggersCompression(t *testing.T) {
 func TestMCP_RequestSendCompressesBody(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.SetSendResponse(
 		"HttpRequestResponse{httpRequest=POST /api/data HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nok}",
@@ -520,7 +521,7 @@ func TestMCP_RequestSendCompressesBody(t *testing.T) {
 func TestMCP_RequestSendNoCompressionWithoutHeader(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	mockMCP.SetSendResponse(
 		"HttpRequestResponse{httpRequest=POST /api/data HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nok}",
@@ -548,7 +549,7 @@ func TestMCP_RequestSendNoCompressionWithoutHeader(t *testing.T) {
 func TestMCP_ProxyPollSinceReplayFlowID(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Add proxy entries
 	mockMCP.AddProxyEntry(
@@ -610,7 +611,7 @@ func TestMCP_ProxyPollSinceReplayFlowID(t *testing.T) {
 func TestMCP_ProxyPollSinceMultipleReplays(t *testing.T) {
 	t.Parallel()
 
-	_, mcpClient, mockMCP, _, _ := setupMCPServerWithMock(t)
+	_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
 
 	// Add a proxy entry
 	mockMCP.AddProxyEntry(
@@ -660,4 +661,106 @@ func TestMCP_ProxyPollSinceMultipleReplays(t *testing.T) {
 		assert.NotEqual(t, replay1.ReplayID, flow.FlowID)
 	}
 	assert.True(t, foundReplay2)
+}
+
+func TestMCP_DomainScoping(t *testing.T) {
+	t.Parallel()
+
+	t.Run("replay_send_rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"allowed.test"},
+		})
+
+		mockMCP.AddProxyEntry(
+			"GET /page HTTP/1.1\r\nHost: blocked.test\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\nok",
+			"",
+		)
+
+		listResp := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
+			"output_mode": "flows",
+			"host":        "blocked.test",
+		})
+		require.NotEmpty(t, listResp.Flows)
+
+		result := CallMCPTool(t, mcpClient, "replay_send", map[string]interface{}{
+			"flow_id": listResp.Flows[0].FlowID,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, ExtractMCPText(t, result), "domain rejected")
+	})
+
+	t.Run("replay_send_force_still_rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"allowed.test"},
+		})
+
+		mockMCP.AddProxyEntry(
+			"GET /page HTTP/1.1\r\nHost: blocked.test\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\nok",
+			"",
+		)
+
+		listResp := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
+			"output_mode": "flows",
+			"host":        "blocked.test",
+		})
+		require.NotEmpty(t, listResp.Flows)
+
+		result := CallMCPTool(t, mcpClient, "replay_send", map[string]interface{}{
+			"flow_id": listResp.Flows[0].FlowID,
+			"force":   true,
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, ExtractMCPText(t, result), "domain rejected")
+	})
+
+	t.Run("request_send_rejected", func(t *testing.T) {
+		t.Parallel()
+
+		_, mcpClient, _, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"allowed.test"},
+		})
+
+		result := CallMCPTool(t, mcpClient, "request_send", map[string]interface{}{
+			"url": "https://blocked.test/api",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, ExtractMCPText(t, result), "domain rejected")
+	})
+
+	t.Run("request_send_excluded_subdomain", func(t *testing.T) {
+		t.Parallel()
+
+		_, mcpClient, _, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			ExcludeDomains: []string{"internal.corp"},
+		})
+
+		result := CallMCPTool(t, mcpClient, "request_send", map[string]interface{}{
+			"url": "https://db.internal.corp/admin",
+		})
+		assert.True(t, result.IsError)
+		assert.Contains(t, ExtractMCPText(t, result), "domain rejected")
+	})
+
+	t.Run("allowed_domain_succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"allowed.test"},
+		})
+
+		mockMCP.SetSendResponse(
+			"HttpRequestResponse{httpRequest=GET /ok HTTP/1.1, httpResponse=HTTP/1.1 200 OK\r\n\r\nok}",
+		)
+
+		resp := CallMCPToolJSONOK[protocol.ReplaySendResponse](t, mcpClient, "request_send", map[string]interface{}{
+			"url": "https://allowed.test/ok",
+		})
+		assert.NotEmpty(t, resp.ReplayID)
+	})
 }

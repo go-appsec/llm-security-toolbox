@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -32,24 +34,26 @@ func DefaultPath() string {
 }
 
 type Config struct {
-	Version      string        `json:"version"`
-	MCPPort      int           `json:"mcp_port,omitempty"`
-	ProxyPort    int           `json:"proxy_port,omitempty"`
-	BurpRequired *bool         `json:"burp_required,omitempty"`
-	MaxBodyBytes int           `json:"max_body_bytes,omitempty"` // limits request/response body sizes
-	Crawler      CrawlerConfig `json:"crawler,omitempty"`
+	Version           string        `json:"version"`
+	MCPPort           int           `json:"mcp_port,omitempty"`
+	ProxyPort         int           `json:"proxy_port,omitempty"`
+	BurpRequired      *bool         `json:"burp_required,omitempty"`
+	MaxBodyBytes      int           `json:"max_body_bytes,omitempty"` // limits request/response body sizes
+	IncludeSubdomains *bool         `json:"include_subdomains,omitempty"`
+	AllowedDomains    []string      `json:"allowed_domains,omitempty"`
+	ExcludeDomains    []string      `json:"exclude_domains,omitempty"`
+	Crawler           CrawlerConfig `json:"crawler,omitempty"`
 }
 
 type CrawlerConfig struct {
-	IncludeSubdomains *bool    `json:"include_subdomains,omitempty"`
-	DisallowedPaths   []string `json:"disallowed_paths,omitempty"`
-	DelayMS           int      `json:"delay_ms,omitempty"`
-	Parallelism       int      `json:"parallelism,omitempty"`
-	MaxDepth          int      `json:"max_depth,omitempty"`
-	MaxRequests       int      `json:"max_requests,omitempty"`
-	ExtractForms      *bool    `json:"extract_forms,omitempty"`
-	SubmitForms       *bool    `json:"submit_forms,omitempty"`
-	Recon             *bool    `json:"recon,omitempty"`
+	DisallowedPaths []string `json:"disallowed_paths,omitempty"`
+	DelayMS         int      `json:"delay_ms,omitempty"`
+	Parallelism     int      `json:"parallelism,omitempty"`
+	MaxDepth        int      `json:"max_depth,omitempty"`
+	MaxRequests     int      `json:"max_requests,omitempty"`
+	ExtractForms    *bool    `json:"extract_forms,omitempty"`
+	SubmitForms     *bool    `json:"submit_forms,omitempty"`
+	Recon           *bool    `json:"recon,omitempty"`
 }
 
 // DefaultConfig returns a Config with default values.
@@ -57,13 +61,13 @@ func DefaultConfig() *Config {
 	t := true
 	f := false
 	return &Config{
-		Version:      Version,
-		MCPPort:      DefaultMCPPort,
-		ProxyPort:    DefaultProxyPort,
-		BurpRequired: &f,
-		MaxBodyBytes: 10485760, // 10MB
+		Version:           Version,
+		MCPPort:           DefaultMCPPort,
+		ProxyPort:         DefaultProxyPort,
+		BurpRequired:      &f,
+		MaxBodyBytes:      10485760, // 10MB
+		IncludeSubdomains: &t,
 		Crawler: CrawlerConfig{
-			IncludeSubdomains: &t,
 			DisallowedPaths: []string{
 				"*logout*",
 				"*signout*",
@@ -113,8 +117,8 @@ func Load(path string) (*Config, error) {
 	if cfg.MaxBodyBytes == 0 {
 		cfg.MaxBodyBytes = defaults.MaxBodyBytes
 	}
-	if cfg.Crawler.IncludeSubdomains == nil {
-		cfg.Crawler.IncludeSubdomains = defaults.Crawler.IncludeSubdomains
+	if cfg.IncludeSubdomains == nil {
+		cfg.IncludeSubdomains = defaults.IncludeSubdomains
 	}
 	if cfg.Crawler.DisallowedPaths == nil {
 		cfg.Crawler.DisallowedPaths = defaults.Crawler.DisallowedPaths
@@ -193,4 +197,39 @@ func LoadOrCreatePath(path string) (*Config, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 	return cfg, nil
+}
+
+// IsDomainAllowed checks whether a hostname is permitted by the domain scoping
+// configuration. Returns true if allowed, or false with a reason string.
+func (c *Config) IsDomainAllowed(hostname string) (bool, string) {
+	// Strip port if present
+	if h, _, err := net.SplitHostPort(hostname); err == nil {
+		hostname = h
+	}
+	hostname = strings.ToLower(hostname)
+
+	// Check ExcludeDomains first (always includes subdomains)
+	for _, d := range c.ExcludeDomains {
+		d = strings.ToLower(d)
+		if hostname == d || strings.HasSuffix(hostname, "."+d) {
+			return false, "domain " + hostname + " is in exclude_domains"
+		}
+	}
+
+	if len(c.AllowedDomains) == 0 {
+		return true, "" // If AllowedDomains is empty, allow all
+	}
+
+	includeSubdomains := c.IncludeSubdomains != nil && *c.IncludeSubdomains
+
+	for _, d := range c.AllowedDomains {
+		d = strings.ToLower(d)
+		if hostname == d {
+			return true, ""
+		} else if includeSubdomains && strings.HasSuffix(hostname, "."+d) {
+			return true, ""
+		}
+	}
+
+	return false, "domain " + hostname + " is not in allowed_domains"
 }

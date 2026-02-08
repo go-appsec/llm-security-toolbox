@@ -42,7 +42,7 @@ type CollyBackend struct {
 	mu           sync.RWMutex
 	sessions     map[string]*crawlSession // by ID
 	byLabel      map[string]string        // label -> session ID
-	config       config.CrawlerConfig
+	config       config.Config
 	maxBodyBytes int
 	closed       bool
 
@@ -193,12 +193,12 @@ func readBodyLimited(r io.Reader, limit int) ([]byte, int, bool) {
 }
 
 // NewCollyBackend creates a new Colly-backed CrawlerBackend.
-func NewCollyBackend(cfg config.CrawlerConfig, maxBodyBytes int, proxyIndex *store.ProxyIndex, httpBackend HttpBackend) *CollyBackend {
+func NewCollyBackend(cfg *config.Config, proxyIndex *store.ProxyIndex, httpBackend HttpBackend) *CollyBackend {
 	return &CollyBackend{
 		sessions:     make(map[string]*crawlSession),
 		byLabel:      make(map[string]string),
-		config:       cfg,
-		maxBodyBytes: maxBodyBytes,
+		config:       *cfg,
+		maxBodyBytes: cfg.MaxBodyBytes,
 		proxyIndex:   proxyIndex,
 		httpBackend:  httpBackend,
 	}
@@ -231,7 +231,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 
 	// Apply defaults from config
 	if len(opts.DisallowedPaths) == 0 {
-		opts.DisallowedPaths = b.config.DisallowedPaths
+		opts.DisallowedPaths = b.config.Crawler.DisallowedPaths
 	}
 
 	sessionCtx, cancel := context.WithCancel(context.Background())
@@ -269,7 +269,7 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 	)
 
 	// Configure allowed domains with subdomain support
-	if *b.config.IncludeSubdomains && opts.IncludeSubdomains {
+	if *b.config.IncludeSubdomains {
 		c.URLFilters = buildDomainFilters(allowedDomains)
 	} else {
 		c.AllowedDomains = allowedDomains
@@ -279,6 +279,10 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 		c.MaxDepth = opts.MaxDepth
 	}
 	c.DisallowedURLFilters = sess.disallowedRegexes
+	// Append exclude_domains from config as URL filters (always includes subdomains)
+	if len(b.config.ExcludeDomains) > 0 {
+		c.DisallowedURLFilters = append(c.DisallowedURLFilters, buildDomainFilters(b.config.ExcludeDomains)...)
+	}
 
 	if opts.IgnoreRobotsTxt {
 		c.IgnoreRobotsTxt = true
@@ -288,11 +292,11 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 	// Rate limiting
 	delay := opts.Delay
 	if delay == 0 {
-		delay = time.Duration(b.config.DelayMS) * time.Millisecond
+		delay = time.Duration(b.config.Crawler.DelayMS) * time.Millisecond
 	}
 	parallelism := opts.Parallelism
 	if parallelism == 0 {
-		parallelism = b.config.Parallelism
+		parallelism = b.config.Crawler.Parallelism
 	}
 	_ = c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
@@ -451,8 +455,8 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 
 	// Form extraction - config default, then explicit option override
 	extractForms := true
-	if b.config.ExtractForms != nil {
-		extractForms = *b.config.ExtractForms
+	if b.config.Crawler.ExtractForms != nil {
+		extractForms = *b.config.Crawler.ExtractForms
 	}
 	if opts.ExtractForms != nil {
 		extractForms = *opts.ExtractForms
@@ -527,8 +531,8 @@ func (b *CollyBackend) CreateSession(ctx context.Context, opts CrawlOptions) (*C
 
 	// Start recon in background if enabled
 	var recon bool
-	if b.config.Recon != nil {
-		recon = *b.config.Recon
+	if b.config.Crawler.Recon != nil {
+		recon = *b.config.Crawler.Recon
 	}
 	if recon && len(allowedDomains) > 0 {
 		sess.reconWg.Add(1)
@@ -600,8 +604,8 @@ func (b *CollyBackend) AddSeeds(ctx context.Context, sessionID string, seeds []C
 
 	// Start recon for new domains if enabled
 	var recon bool
-	if b.config.Recon != nil {
-		recon = *b.config.Recon
+	if b.config.Crawler.Recon != nil {
+		recon = *b.config.Crawler.Recon
 	}
 	if recon && len(newDomains) > 0 {
 		sess.reconWg.Add(1)
@@ -913,6 +917,13 @@ func (b *CollyBackend) resolveSeeds(ctx context.Context, seeds []CrawlSeed, expl
 		}
 	}
 
+	// Validate all domains against config domain scoping
+	for d := range domainSet {
+		if allowed, reason := b.config.IsDomainAllowed(d); !allowed {
+			return nil, nil, nil, fmt.Errorf("domain rejected: %s", reason)
+		}
+	}
+
 	return bulk.MapKeysSlice(domainSet), seedURLs, seedHeaders, nil
 }
 
@@ -921,7 +932,7 @@ func (b *CollyBackend) runReconForSession(ctx context.Context, sess *crawlSessio
 	// Check session state before starting
 	sess.mu.RLock()
 	state := sess.info.State
-	includeSubdomains := *b.config.IncludeSubdomains && sess.opts.IncludeSubdomains
+	includeSubdomains := *b.config.IncludeSubdomains
 	allowedDomains := sess.allowedDomains
 	sess.mu.RUnlock()
 

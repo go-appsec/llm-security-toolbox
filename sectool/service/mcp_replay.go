@@ -188,6 +188,11 @@ func (m *mcpServer) handleReplaySend(ctx context.Context, req mcp.CallToolReques
 	targetOverride := req.GetString("target", "")
 	host, port, usesHTTPS := parseTarget(rawRequest, targetOverride)
 
+	// Check domain scoping
+	if allowed, reason := m.service.cfg.IsDomainAllowed(host); !allowed {
+		return errorResult("domain rejected: " + reason), nil
+	}
+
 	// HTTP/2 requires TLS.
 	// If replaying an H2 request and user explicitly specified http://, return error.
 	// Otherwise force HTTPS (handles non-443 ports where parseTarget can't infer scheme).
@@ -361,6 +366,11 @@ func (m *mcpServer) handleRequestSend(ctx context.Context, req mcp.CallToolReque
 	parsedURL, err := parseURLWithDefaultHTTPS(urlStr)
 	if err != nil {
 		return errorResult("invalid URL: " + err.Error()), nil
+	}
+
+	// Check domain scoping
+	if allowed, reason := m.service.cfg.IsDomainAllowed(parsedURL.Hostname()); !allowed {
+		return errorResult("domain rejected: " + reason), nil
 	}
 
 	rawRequest := buildRawRequest(method, parsedURL, headers, body)

@@ -115,3 +115,111 @@ func TestDefaultPath(t *testing.T) {
 	assert.Contains(t, path, ".sectool")
 	assert.Contains(t, path, "config.json")
 }
+
+func TestIsDomainAllowed(t *testing.T) {
+	t.Parallel()
+
+	boolPtr := func(v bool) *bool { return &v }
+
+	cases := []struct {
+		name       string
+		cfg        *Config
+		hostname   string
+		wantOK     bool
+		wantReason string
+	}{
+		{
+			name:     "no_config_allows_all",
+			cfg:      &Config{IncludeSubdomains: boolPtr(true)},
+			hostname: "anything.example.com",
+			wantOK:   true,
+		},
+		{
+			name: "exclude_takes_precedence",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				AllowedDomains:    []string{"example.com"},
+				ExcludeDomains:    []string{"example.com"},
+			},
+			hostname:   "example.com",
+			wantOK:     false,
+			wantReason: "exclude_domains",
+		},
+		{
+			name: "exclude_matches_subdomains",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				ExcludeDomains:    []string{"evil.com"},
+			},
+			hostname:   "sub.evil.com",
+			wantOK:     false,
+			wantReason: "exclude_domains",
+		},
+		{
+			name: "allowed_exact_match",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(false),
+				AllowedDomains:    []string{"example.com"},
+			},
+			hostname: "example.com",
+			wantOK:   true,
+		},
+		{
+			name: "allowed_subdomain_match",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				AllowedDomains:    []string{"example.com"},
+			},
+			hostname: "api.example.com",
+			wantOK:   true,
+		},
+		{
+			name: "allowed_no_subdomains",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(false),
+				AllowedDomains:    []string{"example.com"},
+			},
+			hostname:   "api.example.com",
+			wantOK:     false,
+			wantReason: "not in allowed_domains",
+		},
+		{
+			name: "not_in_allowed",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				AllowedDomains:    []string{"example.com"},
+			},
+			hostname:   "other.com",
+			wantOK:     false,
+			wantReason: "not in allowed_domains",
+		},
+		{
+			name: "hostname_with_port",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				AllowedDomains:    []string{"example.com"},
+			},
+			hostname: "example.com:8443",
+			wantOK:   true,
+		},
+		{
+			name: "case_insensitive",
+			cfg: &Config{
+				IncludeSubdomains: boolPtr(true),
+				AllowedDomains:    []string{"Example.COM"},
+			},
+			hostname: "API.example.com",
+			wantOK:   true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, reason := tc.cfg.IsDomainAllowed(tc.hostname)
+			assert.Equal(t, tc.wantOK, ok)
+			if tc.wantReason != "" {
+				assert.Contains(t, reason, tc.wantReason)
+			}
+		})
+	}
+}

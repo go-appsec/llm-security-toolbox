@@ -339,9 +339,6 @@ func (c *Client) CrawlCreate(ctx context.Context, opts CrawlCreateOpts) (*protoc
 	if opts.Parallelism > 0 {
 		args["parallelism"] = opts.Parallelism
 	}
-	if opts.IncludeSubdomains != nil {
-		args["include_subdomains"] = *opts.IncludeSubdomains
-	}
 	if opts.SubmitForms {
 		args["submit_forms"] = opts.SubmitForms
 	}
