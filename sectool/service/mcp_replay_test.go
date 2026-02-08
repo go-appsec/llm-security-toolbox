@@ -669,7 +669,7 @@ func TestMCP_DomainScoping(t *testing.T) {
 	t.Run("replay_send_rejected", func(t *testing.T) {
 		t.Parallel()
 
-		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+		srv, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
 			AllowedDomains: []string{"allowed.test"},
 		})
 
@@ -679,14 +679,11 @@ func TestMCP_DomainScoping(t *testing.T) {
 			"",
 		)
 
-		listResp := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
-			"output_mode": "flows",
-			"host":        "blocked.test",
-		})
-		require.NotEmpty(t, listResp.Flows)
+		// Register flow_id directly — proxy_poll filters out-of-scope domains
+		flowID := srv.proxyIndex.Register(0)
 
 		result := CallMCPTool(t, mcpClient, "replay_send", map[string]interface{}{
-			"flow_id": listResp.Flows[0].FlowID,
+			"flow_id": flowID,
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, ExtractMCPText(t, result), "domain rejected")
@@ -695,7 +692,7 @@ func TestMCP_DomainScoping(t *testing.T) {
 	t.Run("replay_send_force_still_rejected", func(t *testing.T) {
 		t.Parallel()
 
-		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+		srv, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
 			AllowedDomains: []string{"allowed.test"},
 		})
 
@@ -705,14 +702,11 @@ func TestMCP_DomainScoping(t *testing.T) {
 			"",
 		)
 
-		listResp := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
-			"output_mode": "flows",
-			"host":        "blocked.test",
-		})
-		require.NotEmpty(t, listResp.Flows)
+		// Register flow_id directly — proxy_poll filters out-of-scope domains
+		flowID := srv.proxyIndex.Register(0)
 
 		result := CallMCPTool(t, mcpClient, "replay_send", map[string]interface{}{
-			"flow_id": listResp.Flows[0].FlowID,
+			"flow_id": flowID,
 			"force":   true,
 		})
 		assert.True(t, result.IsError)

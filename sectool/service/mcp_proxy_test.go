@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/go-appsec/llm-security-toolbox/sectool/config"
 	"github.com/go-appsec/llm-security-toolbox/sectool/protocol"
 )
 
@@ -593,5 +594,114 @@ func TestMCP_ProxyRuleValidation(t *testing.T) {
 		})
 		assert.True(t, result.IsError)
 		assert.Contains(t, ExtractMCPText(t, result), "not found")
+	})
+}
+
+func TestMCP_ProxyPollDomainScoping(t *testing.T) {
+	t.Parallel()
+
+	t.Run("allowed_domains_filters", func(t *testing.T) {
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"example.com"},
+		})
+		mockMCP.AddProxyEntry(
+			"GET /api HTTP/1.1\r\nHost: example.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+		mockMCP.AddProxyEntry(
+			"GET /other HTTP/1.1\r\nHost: other.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+
+		// Summary mode: only example.com
+		summary := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", nil)
+		require.NotEmpty(t, summary.Aggregates)
+		for _, agg := range summary.Aggregates {
+			assert.Equal(t, "example.com", agg.Host)
+		}
+
+		// Flows mode: only example.com
+		flows := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
+			"output_mode": "flows",
+			"limit":       10,
+		})
+		require.NotEmpty(t, flows.Flows)
+		for _, f := range flows.Flows {
+			assert.Equal(t, "example.com", f.Host)
+		}
+	})
+
+	t.Run("exclude_domains_filters", func(t *testing.T) {
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			ExcludeDomains: []string{"noise.com"},
+		})
+		mockMCP.AddProxyEntry(
+			"GET /target HTTP/1.1\r\nHost: target.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+		mockMCP.AddProxyEntry(
+			"GET /noise HTTP/1.1\r\nHost: noise.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+
+		summary := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", nil)
+		require.NotEmpty(t, summary.Aggregates)
+		for _, agg := range summary.Aggregates {
+			assert.NotEqual(t, "noise.com", agg.Host)
+		}
+	})
+
+	t.Run("no_scoping_passes_all", func(t *testing.T) {
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServer(t)
+		mockMCP.AddProxyEntry(
+			"GET /a HTTP/1.1\r\nHost: one.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+		mockMCP.AddProxyEntry(
+			"GET /b HTTP/1.1\r\nHost: two.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+
+		summary := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", nil)
+		assert.Len(t, summary.Aggregates, 2)
+	})
+
+	t.Run("replay_entries_filtered", func(t *testing.T) {
+		_, mcpClient, mockMCP, _, _ := setupMockMCPServerWithConfig(t, &config.Config{
+			AllowedDomains: []string{"allowed.com"},
+		})
+
+		// Add proxy entries for both domains so replay_send can reference one
+		mockMCP.AddProxyEntry(
+			"GET /ok HTTP/1.1\r\nHost: allowed.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+		mockMCP.AddProxyEntry(
+			"GET /nope HTTP/1.1\r\nHost: blocked.com\r\n\r\n",
+			"HTTP/1.1 200 OK\r\n\r\n", "",
+		)
+
+		// Get flow_id for the allowed entry, then replay it
+		flows := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
+			"output_mode": "flows",
+			"limit":       10,
+		})
+		require.NotEmpty(t, flows.Flows)
+		allowedFlowID := flows.Flows[0].FlowID
+
+		// Replay the allowed entry — creates a replay entry for allowed.com
+		replayResp := CallMCPToolJSONOK[protocol.ReplaySendResponse](t, mcpClient, "replay_send", map[string]interface{}{
+			"flow_id": allowedFlowID,
+		})
+		require.NotEmpty(t, replayResp.ReplayID)
+
+		// Poll again: should only see allowed.com entries (proxy + replay)
+		all := CallMCPToolJSONOK[protocol.ProxyPollResponse](t, mcpClient, "proxy_poll", map[string]interface{}{
+			"output_mode": "flows",
+			"limit":       50,
+		})
+		for _, f := range all.Flows {
+			assert.Equal(t, "allowed.com", f.Host)
+		}
 	})
 }

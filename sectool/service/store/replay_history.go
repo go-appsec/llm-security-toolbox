@@ -167,7 +167,7 @@ func (s *ReplayHistoryStore) getLocked(flowID string) (*ReplayHistoryEntry, bool
 
 // metaKeys returns all meta keys (excluding payload keys). Caller must hold mu.
 func (s *ReplayHistoryStore) metaKeys() []string {
-	return bulk.SliceFilter(func(k string) bool {
+	return bulk.SliceFilterInPlace(func(k string) bool {
 		return !strings.HasSuffix(k, replayPayloadSuffix)
 	}, s.storage.KeySet())
 }

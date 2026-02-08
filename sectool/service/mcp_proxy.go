@@ -137,6 +137,15 @@ func (m *mcpServer) handleProxyPoll(ctx context.Context, req mcp.CallToolRequest
 		return errorResultFromErr("failed to fetch proxy history: ", err), nil
 	}
 
+	// Filter out-of-scope domains before user filters
+	cfg := m.service.cfg
+	if len(cfg.AllowedDomains) > 0 || len(cfg.ExcludeDomains) > 0 {
+		allEntries = bulk.SliceFilterInPlace(func(e flowEntry) bool {
+			allowed, _ := cfg.IsDomainAllowed(e.host)
+			return allowed
+		}, allEntries)
+	}
+
 	// Get lastFlowID for "since=last" support
 	var lastFlowID string
 	if v := m.service.lastFlowID.Load(); v != nil {
@@ -682,7 +691,7 @@ func applyProxyFilters(entries []flowEntry, req *ProxyListRequest, proxyIndex *s
 		}
 	}
 
-	return bulk.SliceFilter(func(e flowEntry) bool {
+	return bulk.SliceFilterInPlace(func(e flowEntry) bool {
 		// Source filter
 		if req.Source != "" && req.Source != e.source {
 			return false
