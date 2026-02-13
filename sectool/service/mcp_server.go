@@ -151,6 +151,7 @@ func (m *mcpServer) registerTools() {
 		m.addJWTTools()
 		m.addCrawlTools()
 		m.addDiffTools()
+		m.addReflectionTools()
 	case WorkflowModeTestReport:
 		m.addProxyTools()
 		m.addReplayTools()
@@ -159,6 +160,7 @@ func (m *mcpServer) registerTools() {
 		m.addHashTools()
 		m.addJWTTools()
 		m.addDiffTools()
+		m.addReflectionTools()
 		// crawl tools excluded
 	default: // Empty (default) workflowMode: require workflow tool call first, all tools registered
 		m.server.AddTool(m.workflowTool(), m.handleWorkflow)
@@ -170,6 +172,7 @@ func (m *mcpServer) registerTools() {
 		m.addJWTTools()
 		m.addCrawlTools()
 		m.addDiffTools()
+		m.addReflectionTools()
 	}
 }
 

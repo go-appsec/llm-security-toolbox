@@ -486,3 +486,13 @@ func (c *Client) CrawlGet(ctx context.Context, flowID string) (*protocol.CrawlGe
 	}
 	return &resp, nil
 }
+
+// FindReflected calls find_reflected and returns detected reflections.
+func (c *Client) FindReflected(ctx context.Context, flowID string) (*protocol.FindReflectedResponse, error) {
+	args := map[string]interface{}{"flow_id": flowID}
+	var resp protocol.FindReflectedResponse
+	if err := c.CallToolJSON(ctx, "find_reflected", args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}

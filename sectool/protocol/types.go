@@ -262,6 +262,31 @@ type CrawlSession struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// CrawlGetResponse is the response for crawl_get.
+type CrawlGetResponse struct {
+	FlowID            string              `json:"flow_id"`
+	Method            string              `json:"method"`
+	URL               string              `json:"url"`
+	FoundOn           string              `json:"found_on,omitempty"`
+	Depth             int                 `json:"depth"`
+	ReqHeaders        string              `json:"request_headers"`
+	ReqHeadersParsed  map[string][]string `json:"request_headers_parsed,omitempty"`
+	ReqBody           string              `json:"request_body"`
+	ReqSize           int                 `json:"request_size"`
+	Status            int                 `json:"status"`
+	StatusLine        string              `json:"status_line"`
+	RespHeaders       string              `json:"response_headers"`
+	RespHeadersParsed map[string][]string `json:"response_headers_parsed,omitempty"`
+	RespBody          string              `json:"response_body"`
+	RespSize          int                 `json:"response_size"`
+	Truncated         bool                `json:"truncated,omitempty"`
+	Duration          string              `json:"duration"`
+}
+
+// =============================================================================
+// Cookie Types
+// =============================================================================
+
 // CookieJarResponse is the response for cookie_jar.
 type CookieJarResponse struct {
 	Cookies []CookieEntry `json:"cookies"`
@@ -383,23 +408,19 @@ type PathABChange struct {
 	B    interface{} `json:"b"`
 }
 
-// CrawlGetResponse is the response for crawl_get.
-type CrawlGetResponse struct {
-	FlowID            string              `json:"flow_id"`
-	Method            string              `json:"method"`
-	URL               string              `json:"url"`
-	FoundOn           string              `json:"found_on,omitempty"`
-	Depth             int                 `json:"depth"`
-	ReqHeaders        string              `json:"request_headers"`
-	ReqHeadersParsed  map[string][]string `json:"request_headers_parsed,omitempty"`
-	ReqBody           string              `json:"request_body"`
-	ReqSize           int                 `json:"request_size"`
-	Status            int                 `json:"status"`
-	StatusLine        string              `json:"status_line"`
-	RespHeaders       string              `json:"response_headers"`
-	RespHeadersParsed map[string][]string `json:"response_headers_parsed,omitempty"`
-	RespBody          string              `json:"response_body"`
-	RespSize          int                 `json:"response_size"`
-	Truncated         bool                `json:"truncated,omitempty"`
-	Duration          string              `json:"duration"`
+// =============================================================================
+// Reflection Types
+// =============================================================================
+
+// FindReflectedResponse is the response for find_reflected.
+type FindReflectedResponse struct {
+	Reflections []Reflection `json:"reflections"`
+}
+
+// Reflection represents a request parameter value found in the response.
+type Reflection struct {
+	Name      string   `json:"name"`
+	Source    string   `json:"source"`
+	Value     string   `json:"value"`
+	Locations []string `json:"locations"`
 }

@@ -870,7 +870,7 @@ func TestIntegration_OAST(t *testing.T) {
 			t.Skip("no OAST session created")
 		}
 
-		resp, err := client.OastPoll(t.Context(), oastID, mcpclient.OastPollOpts{OutputMode: "events"})
+		resp, err := client.OastPoll(t.Context(), oastID, mcpclient.OastPollOpts{OutputMode: "events", Wait: "0s"})
 		require.NoError(t, err)
 
 		// May or may not have events depending on timing

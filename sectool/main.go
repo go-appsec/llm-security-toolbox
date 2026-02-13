@@ -18,6 +18,7 @@ import (
 	"github.com/go-appsec/toolbox/sectool/jwt"
 	"github.com/go-appsec/toolbox/sectool/oast"
 	"github.com/go-appsec/toolbox/sectool/proxy"
+	"github.com/go-appsec/toolbox/sectool/reflected"
 	"github.com/go-appsec/toolbox/sectool/replay"
 	"github.com/go-appsec/toolbox/sectool/service"
 )
@@ -51,7 +52,7 @@ func main() {
 		return
 
 	// Commands that need MCP client
-	case "proxy", "replay", "oast", "crawl", "diff":
+	case "proxy", "replay", "oast", "crawl", "diff", "reflected":
 		var mcpURL string
 		mcpURL, err = getMCPURL(globalFlags)
 		if err != nil {
@@ -69,10 +70,12 @@ func main() {
 			err = crawl.Parse(args[1:], mcpURL)
 		case "diff":
 			err = diff.Parse(args[1:], mcpURL)
+		case "reflected":
+			err = reflected.Parse(args[1:], mcpURL)
 		}
 
 	default:
-		validCommands := []string{"mcp", "proxy", "replay", "oast", "crawl", "diff", "encode", "decode", "hash", "jwt", "version", "help"}
+		validCommands := []string{"mcp", "proxy", "replay", "oast", "crawl", "diff", "reflected", "encode", "decode", "hash", "jwt", "version", "help"}
 		err = cliutil.UnknownCommandError(args[0], validCommands)
 	}
 
@@ -112,6 +115,7 @@ Commands:
   oast       Manage OAST domains for out-of-band testing
   crawl      Web crawler for URL and form discovery
   diff       Compare two captured flows
+  reflected  Detect reflected parameters in a flow
   encode     Encode strings (url, base64, html)
   decode     Decode strings (url, base64, html)
   hash       Compute hash digests (md5, sha1, sha256, sha512)

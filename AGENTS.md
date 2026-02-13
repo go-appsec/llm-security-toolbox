@@ -52,6 +52,7 @@ MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawle
 - `sectool/service/mcp_hash.go` - Hash tool handler (md5, sha1, sha256, sha512, HMAC)
 - `sectool/service/mcp_jwt.go` - JWT decode tool handler
 - `sectool/service/mcp_diff.go` - Diff tool handler (structured flow comparison)
+- `sectool/service/mcp_reflection.go` - Reflection tool handler (parameter reflection detection)
 - `sectool/service/flags.go` - MCP server flag parsing (`--port`, `--workflow`, `--config`)
 - `sectool/service/backend.go` - HttpBackend, OastBackend, CrawlerBackend interfaces
 - `sectool/service/backend_http_native.go` - Native built-in proxy implementation of HttpBackend
@@ -113,6 +114,8 @@ MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawle
 - `sectool/jwt/jwt.go` - JWT decode and inspection
 - `sectool/diff/flags.go` - Diff subcommand parsing
 - `sectool/diff/diff.go` - Diff command implementation (CLI formatting and display)
+- `sectool/reflected/flags.go` - Reflected subcommand parsing
+- `sectool/reflected/reflected.go` - Reflected command implementation
 
 ### Config
 
@@ -192,6 +195,7 @@ Bundles at `./sectool-requests/<flow_id>/`: `request.http` (headers + body place
 - `hash` - compute hash digest (md5, sha1, sha256, sha512, HMAC)
 - `jwt_decode` - decode and inspect JWT tokens
 - `diff_flow` - compare two captured flows with structured, content-type-aware diffing
+- `find_reflected` - detect request parameter values reflected in the response
 
 ## CLI Commands
 
@@ -206,6 +210,7 @@ CLI requires a running MCP server. Maps to MCP tools via `sectool <module> <sub>
 - `hash`: compute hash digests
 - `jwt`: decode JWT tokens
 - `diff`: `<flow_a> <flow_b> --scope <scope>`
+- `reflected`: `<flow_id>`
 - `version`
 
 ## Development Guidelines
