@@ -375,26 +375,19 @@ func (m *mcpServer) handleProxyGet(ctx context.Context, req mcp.CallToolRequest)
 	// Hidden parameter for CLI: returns full base64-encoded bodies instead of previews
 	fullBody := req.GetBool("full_body", false)
 
-	var rawReq, rawResp []byte
-	var source string
+	resolved, errResult := m.resolveFlow(ctx, flowID)
+	if errResult != nil {
+		return errResult, nil
+	}
+	rawReq := resolved.RawRequest
+	rawResp := resolved.RawResponse
 
-	if replayEntry, ok := m.service.replayHistoryStore.Get(flowID); ok {
-		rawReq = replayEntry.RawRequest
-		rawResp = slices.Concat(replayEntry.RespHeaders, replayEntry.RespBody)
+	// Determine source for logging
+	var source string
+	if _, ok := m.service.replayHistoryStore.Get(flowID); ok {
 		source = SourceReplay
-	} else if offset, ok := m.service.proxyIndex.Offset(flowID); ok {
-		proxyEntries, err := m.service.httpBackend.GetProxyHistory(ctx, 1, offset)
-		if err != nil {
-			return errorResultFromErr("failed to fetch flow: ", err), nil
-		}
-		if len(proxyEntries) == 0 {
-			return errorResult("flow not found in proxy history"), nil
-		}
-		rawReq = []byte(proxyEntries[0].Request)
-		rawResp = []byte(proxyEntries[0].Response)
-		source = SourceProxy
 	} else {
-		return errorResult("flow_id not found: run proxy_poll to see available flows"), nil
+		source = SourceProxy
 	}
 
 	method, host, path := extractRequestMeta(string(rawReq))

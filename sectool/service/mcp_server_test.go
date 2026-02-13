@@ -133,6 +133,7 @@ func TestMCP_ListTools(t *testing.T) {
 		"crawl_get",
 		"crawl_sessions",
 		"crawl_stop",
+		"diff_flow",
 	}
 
 	toolNames := make([]string, len(result.Tools))

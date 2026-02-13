@@ -211,9 +211,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(urls) == 0 && len(flows) == 0 {
+	} else if len(urls) == 0 && len(flows) == 0 {
 		fs.Usage()
 		return errors.New("at least one --url or --flow is required")
 	}
@@ -241,14 +239,10 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required (get from 'sectool crawl create' or 'sectool crawl sessions')")
-	}
-
-	if len(urls) == 0 && len(flows) == 0 {
+	} else if len(urls) == 0 && len(flows) == 0 {
 		fs.Usage()
 		return errors.New("at least one --url or --flow is required")
 	}
@@ -272,9 +266,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -298,9 +290,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -338,9 +328,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -372,9 +360,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -401,9 +387,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -451,9 +435,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("session_id required")
 	}
@@ -477,9 +459,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 1 {
+	} else if len(fs.Args()) < 1 {
 		fs.Usage()
 		return errors.New("flow_id required (get from 'sectool crawl list')")
 	}

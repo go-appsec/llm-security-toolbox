@@ -13,6 +13,13 @@ func formatColor(c text.Color, s string) string {
 	return c.Sprint(s)
 }
 
+func formatColors(colors text.Colors, s string) string {
+	if !Output.ColorsEnabled() {
+		return s
+	}
+	return colors.Sprint(s)
+}
+
 // StatusColor returns the appropriate color for an HTTP status code.
 func StatusColor(status int) text.Color {
 	switch {
@@ -65,4 +72,14 @@ func Warning(s string) string {
 // Error returns text formatted as error.
 func Error(s string) string {
 	return formatColor(text.FgRed, s)
+}
+
+// BoldRed returns text with bold+red formatting for inline diff emphasis.
+func BoldRed(s string) string {
+	return formatColors(text.Colors{text.Bold, text.FgRed}, s)
+}
+
+// BoldGreen returns text with bold+green formatting for inline diff emphasis.
+func BoldGreen(s string) string {
+	return formatColors(text.Colors{text.Bold, text.FgGreen}, s)
 }

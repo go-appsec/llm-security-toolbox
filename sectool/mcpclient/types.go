@@ -110,6 +110,14 @@ type CookieJarOpts struct {
 	Domain string
 }
 
+// DiffFlowOpts are options for DiffFlow.
+type DiffFlowOpts struct {
+	FlowA        string
+	FlowB        string
+	Scope        string
+	MaxDiffLines int
+}
+
 // OastPollOpts are options for OastPoll.
 type OastPollOpts struct {
 	OutputMode string // "summary" or "events"

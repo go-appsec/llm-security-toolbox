@@ -248,9 +248,7 @@ Options:
 
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if len(fs.Args()) < 2 {
+	} else if len(fs.Args()) < 2 {
 		fs.Usage()
 		return errors.New("oast_id and event_id required (get event_id from 'sectool oast poll')")
 	}

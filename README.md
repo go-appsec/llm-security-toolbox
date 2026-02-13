@@ -152,6 +152,10 @@ sectool hash --key "secret" "test"            # HMAC-SHA-256
 
 # JWT inspection
 sectool jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig
+
+# Diff flows
+sectool diff <flow_a> <flow_b> --scope response
+sectool diff <flow_a> <flow_b> --scope request_headers
 ```
 
 Use `sectool <command> --help` for detailed options.
@@ -165,4 +169,5 @@ Use `sectool <command> --help` for detailed options.
 - **Request replay** - Replay captured requests with modifications to headers, body, query params, or JSON fields
 - **Web crawling** - Discover application structure, forms, and endpoints
 - **OAST testing** - Create out-of-band domains and poll for DNS/HTTP/SMTP interactions via Interactsh
+- **Flow diffing** - Compare two captured flows with structured, content-type-aware diffs (JSON path-level, unified text, binary size)
 - **Encoding utilities** - URL, Base64, HTML encoding/decoding, hashing (MD5/SHA/HMAC), JWT inspection

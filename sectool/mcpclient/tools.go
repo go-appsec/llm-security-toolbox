@@ -459,6 +459,24 @@ func (c *Client) CrawlStop(ctx context.Context, sessionID string) error {
 	return err
 }
 
+// DiffFlow calls diff_flow and returns the structured diff.
+func (c *Client) DiffFlow(ctx context.Context, opts DiffFlowOpts) (*protocol.DiffFlowResponse, error) {
+	args := map[string]interface{}{
+		"flow_a": opts.FlowA,
+		"flow_b": opts.FlowB,
+		"scope":  opts.Scope,
+	}
+	if opts.MaxDiffLines > 0 {
+		args["max_diff_lines"] = opts.MaxDiffLines
+	}
+
+	var resp protocol.DiffFlowResponse
+	if err := c.CallToolJSON(ctx, "diff_flow", args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // CrawlGet calls crawl_get and returns full flow data.
 func (c *Client) CrawlGet(ctx context.Context, flowID string) (*protocol.CrawlGetResponse, error) {
 	args := map[string]interface{}{"flow_id": flowID, "full_body": true}

@@ -12,6 +12,7 @@ import (
 	"github.com/go-appsec/toolbox/sectool/cliutil"
 	"github.com/go-appsec/toolbox/sectool/config"
 	"github.com/go-appsec/toolbox/sectool/crawl"
+	"github.com/go-appsec/toolbox/sectool/diff"
 	"github.com/go-appsec/toolbox/sectool/encoding"
 	"github.com/go-appsec/toolbox/sectool/hash"
 	"github.com/go-appsec/toolbox/sectool/jwt"
@@ -50,7 +51,7 @@ func main() {
 		return
 
 	// Commands that need MCP client
-	case "proxy", "replay", "oast", "crawl":
+	case "proxy", "replay", "oast", "crawl", "diff":
 		var mcpURL string
 		mcpURL, err = getMCPURL(globalFlags)
 		if err != nil {
@@ -66,10 +67,12 @@ func main() {
 			err = oast.Parse(args[1:], mcpURL)
 		case "crawl":
 			err = crawl.Parse(args[1:], mcpURL)
+		case "diff":
+			err = diff.Parse(args[1:], mcpURL)
 		}
 
 	default:
-		validCommands := []string{"mcp", "proxy", "replay", "oast", "crawl", "encode", "decode", "hash", "jwt", "version", "help"}
+		validCommands := []string{"mcp", "proxy", "replay", "oast", "crawl", "diff", "encode", "decode", "hash", "jwt", "version", "help"}
 		err = cliutil.UnknownCommandError(args[0], validCommands)
 	}
 
@@ -108,6 +111,7 @@ Commands:
   replay     Replay HTTP requests (with modifications)
   oast       Manage OAST domains for out-of-band testing
   crawl      Web crawler for URL and form discovery
+  diff       Compare two captured flows
   encode     Encode strings (url, base64, html)
   decode     Decode strings (url, base64, html)
   hash       Compute hash digests (md5, sha1, sha256, sha512)

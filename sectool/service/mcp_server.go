@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -149,6 +150,7 @@ func (m *mcpServer) registerTools() {
 		m.addHashTools()
 		m.addJWTTools()
 		m.addCrawlTools()
+		m.addDiffTools()
 	case WorkflowModeTestReport:
 		m.addProxyTools()
 		m.addReplayTools()
@@ -156,6 +158,7 @@ func (m *mcpServer) registerTools() {
 		m.addEncodingTools()
 		m.addHashTools()
 		m.addJWTTools()
+		m.addDiffTools()
 		// crawl tools excluded
 	default: // Empty (default) workflowMode: require workflow tool call first, all tools registered
 		m.server.AddTool(m.workflowTool(), m.handleWorkflow)
@@ -166,6 +169,7 @@ func (m *mcpServer) registerTools() {
 		m.addHashTools()
 		m.addJWTTools()
 		m.addCrawlTools()
+		m.addDiffTools()
 	}
 }
 
@@ -214,6 +218,10 @@ func (m *mcpServer) addCrawlTools() {
 	m.server.AddTool(m.crawlSessionsTool(), m.handleCrawlSessions)
 	m.server.AddTool(m.crawlStopTool(), m.handleCrawlStop)
 	m.server.AddTool(m.crawlGetTool(), m.handleCrawlGet)
+}
+
+func (m *mcpServer) addDiffTools() {
+	m.server.AddTool(m.diffFlowTool(), m.handleDiffFlow)
 }
 
 const workflowNotInitializedError = "call workflow first with the relevant task, use 'explore' if there is no better fit"
@@ -341,4 +349,41 @@ func translateTimeoutError(err error) string {
 		return "request canceled"
 	}
 	return err.Error()
+}
+
+// resolvedFlow holds the raw request and response bytes for a resolved flow.
+type resolvedFlow struct {
+	RawRequest  []byte
+	RawResponse []byte
+}
+
+// resolveFlow looks up a flow by ID across replay, proxy, and crawler backends.
+// Returns nil and an error result if the flow is not found.
+func (m *mcpServer) resolveFlow(ctx context.Context, flowID string) (*resolvedFlow, *mcp.CallToolResult) {
+	if entry, ok := m.service.replayHistoryStore.Get(flowID); ok {
+		return &resolvedFlow{
+			RawRequest:  entry.RawRequest,
+			RawResponse: slices.Concat(entry.RespHeaders, entry.RespBody),
+		}, nil
+	}
+	if offset, ok := m.service.proxyIndex.Offset(flowID); ok {
+		entries, err := m.service.httpBackend.GetProxyHistory(ctx, 1, offset)
+		if err != nil {
+			return nil, errorResultFromErr("failed to fetch flow: ", err)
+		}
+		if len(entries) == 0 {
+			return nil, errorResult("flow not found in proxy history")
+		}
+		return &resolvedFlow{
+			RawRequest:  []byte(entries[0].Request),
+			RawResponse: []byte(entries[0].Response),
+		}, nil
+	}
+	if flow, err := m.service.crawlerBackend.GetFlow(ctx, flowID); err == nil && flow != nil {
+		return &resolvedFlow{
+			RawRequest:  flow.Request,
+			RawResponse: flow.Response,
+		}, nil
+	}
+	return nil, errorResult("flow_id not found: run proxy_poll or crawl_poll to see available flows")
 }

@@ -281,6 +281,108 @@ type CookieEntry struct {
 	FlowID   string      `json:"flow_id"`
 }
 
+// =============================================================================
+// Diff Types
+// =============================================================================
+
+// DiffFlowResponse is the response for diff_flow.
+type DiffFlowResponse struct {
+	Same     bool          `json:"same,omitempty"`
+	Request  *RequestDiff  `json:"request,omitempty"`
+	Response *ResponseDiff `json:"response,omitempty"`
+}
+
+// RequestDiff contains differences in the request.
+type RequestDiff struct {
+	Method  *ABPair     `json:"method,omitempty"`
+	Path    *ABPair     `json:"path,omitempty"`
+	Query   *ParamsDiff `json:"query,omitempty"`
+	Headers *ParamsDiff `json:"headers,omitempty"`
+	Body    *BodyDiff   `json:"body,omitempty"`
+}
+
+// ResponseDiff contains differences in the response.
+type ResponseDiff struct {
+	Status  *ABIntPair  `json:"status,omitempty"`
+	Headers *ParamsDiff `json:"headers,omitempty"`
+	Body    *BodyDiff   `json:"body,omitempty"`
+}
+
+// ABPair represents a string value that differs between flow A and B.
+type ABPair struct {
+	A string `json:"a"`
+	B string `json:"b"`
+}
+
+// ABIntPair represents an integer value that differs between flow A and B.
+type ABIntPair struct {
+	A int `json:"a"`
+	B int `json:"b"`
+}
+
+// ParamsDiff shows structured add/remove/change for headers or query params.
+type ParamsDiff struct {
+	Added          []NameValue    `json:"added,omitempty"`
+	Removed        []NameValue    `json:"removed,omitempty"`
+	Changed        []NameABChange `json:"changed,omitempty"`
+	UnchangedCount int            `json:"unchanged_count"`
+}
+
+// NameValue is a name-value pair for added/removed headers or params.
+type NameValue struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// NameABChange shows a header or param that changed between A and B.
+type NameABChange struct {
+	Name string `json:"name"`
+	A    string `json:"a"`
+	B    string `json:"b"`
+}
+
+// BodyDiff shows body differences, format-aware.
+type BodyDiff struct {
+	Format string `json:"format"` // "json", "text", "binary"
+
+	// JSON diff fields
+	Added          []PathValue    `json:"added,omitempty"`
+	Removed        []PathEntry    `json:"removed,omitempty"`
+	Changed        []PathABChange `json:"changed,omitempty"`
+	UnchangedCount int            `json:"unchanged_count,omitempty"`
+
+	// Text diff fields
+	Diff    string `json:"diff,omitempty"`
+	Summary string `json:"summary,omitempty"`
+
+	// Size fields (text and binary)
+	ASize int `json:"a_size,omitempty"`
+	BSize int `json:"b_size,omitempty"`
+
+	// Binary diff fields
+	Same *bool `json:"same,omitempty"`
+
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+// PathValue is a JSON path with its value (for added paths).
+type PathValue struct {
+	Path  string      `json:"path"`
+	Value interface{} `json:"value"`
+}
+
+// PathEntry is a JSON path (for removed paths).
+type PathEntry struct {
+	Path string `json:"path"`
+}
+
+// PathABChange shows a JSON path whose value changed.
+type PathABChange struct {
+	Path string      `json:"path"`
+	A    interface{} `json:"a"`
+	B    interface{} `json:"b"`
+}
+
 // CrawlGetResponse is the response for crawl_get.
 type CrawlGetResponse struct {
 	FlowID            string              `json:"flow_id"`

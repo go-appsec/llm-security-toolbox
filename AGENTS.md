@@ -51,6 +51,7 @@ MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawle
 - `sectool/service/mcp_encode.go` - Encode/decode tool handlers (url, base64, html)
 - `sectool/service/mcp_hash.go` - Hash tool handler (md5, sha1, sha256, sha512, HMAC)
 - `sectool/service/mcp_jwt.go` - JWT decode tool handler
+- `sectool/service/mcp_diff.go` - Diff tool handler (structured flow comparison)
 - `sectool/service/flags.go` - MCP server flag parsing (`--port`, `--workflow`, `--config`)
 - `sectool/service/backend.go` - HttpBackend, OastBackend, CrawlerBackend interfaces
 - `sectool/service/backend_http_native.go` - Native built-in proxy implementation of HttpBackend
@@ -110,6 +111,8 @@ MCP Agent  → MCP Server → Backends (Built-in Proxy or Burp MCP, OAST, Crawle
 - `sectool/hash/hash.go` - Hash computation (plain and HMAC)
 - `sectool/jwt/flags.go` - JWT subcommand parsing
 - `sectool/jwt/jwt.go` - JWT decode and inspection
+- `sectool/diff/flags.go` - Diff subcommand parsing
+- `sectool/diff/diff.go` - Diff command implementation (CLI formatting and display)
 
 ### Config
 
@@ -188,6 +191,7 @@ Bundles at `./sectool-requests/<flow_id>/`: `request.http` (headers + body place
 - `decode` - decode a string (url, base64, html)
 - `hash` - compute hash digest (md5, sha1, sha256, sha512, HMAC)
 - `jwt_decode` - decode and inspect JWT tokens
+- `diff_flow` - compare two captured flows with structured, content-type-aware diffing
 
 ## CLI Commands
 
@@ -201,6 +205,7 @@ CLI requires a running MCP server. Maps to MCP tools via `sectool <module> <sub>
 - `decode`: `url`, `base64`, `html`
 - `hash`: compute hash digests
 - `jwt`: decode JWT tokens
+- `diff`: `<flow_a> <flow_b> --scope <scope>`
 - `version`
 
 ## Development Guidelines
