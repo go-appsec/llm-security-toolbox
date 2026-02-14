@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -24,8 +26,9 @@ import (
 )
 
 func main() {
-	globalFlags, args := parseGlobalFlags(os.Args[1:])
+	log.SetFlags(log.Ltime)
 
+	globalFlags, args := parseGlobalFlags(os.Args[1:])
 	if len(args) < 1 {
 		printRootUsage()
 		os.Exit(1)
@@ -35,6 +38,15 @@ func main() {
 	switch args[0] {
 	// Commands that don't need MCP client
 	case "mcp":
+		go func() { // log the date at midnight every day
+			for {
+				now := time.Now()
+				next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 1, 0, now.Location())
+				time.Sleep(next.Sub(now))
+				fmt.Println("Date: " + time.Now().Format(time.RFC850))
+			}
+		}()
+
 		os.Exit(runServiceMode(args[1:]))
 	case "encode":
 		err = encoding.ParseEncode(args[1:])

@@ -702,8 +702,7 @@ func (b *CollyBackend) ListFlows(ctx context.Context, sessionID string, opts Cra
 		// Apply timestamp filter if specified (exclusive - only flows after sinceTime)
 		if useSinceTime && !flow.DiscoveredAt.After(sinceTime) {
 			continue
-		}
-		if !matchesFlowFilters(flow, opts) {
+		} else if !matchesFlowFilters(flow, opts) {
 			continue
 		} else if hasSearch && !matchesFlowSearch(flow.Request, flow.Response, opts.SearchHeaderRe, opts.SearchBodyRe) {
 			continue

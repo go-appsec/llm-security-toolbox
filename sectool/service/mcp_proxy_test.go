@@ -684,6 +684,101 @@ func TestMCP_ProxyRuleValidation(t *testing.T) {
 	})
 }
 
+func TestUnDoubleEscapeRegex(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"no_escapes", "Accept: text/html", "Accept: text/html"},
+		{"single_escape_preserved", `Accept: \*/\*`, `Accept: \*/\*`},
+		{"double_escape_collapsed", `Accept: \\*/\\*`, `Accept: \*/\*`},
+		{"double_escape_dot", `Host: example\\.com`, `Host: example\.com`},
+		{"double_escape_plus", `count: \\d\\+`, `count: \\d\+`},
+		{"literal_backslash_kept", `path: \\\\server`, `path: \\\\server`},
+		{"mixed", `\\. and \. ok`, `\. and \. ok`},
+		{"empty", "", ""},
+		{"trailing_backslash", `test\\`, `test\\`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unDoubleEscapeRegex(tt.in))
+		})
+	}
+}
+
+func TestMCP_ProxyRuleRegexDoubleEscapeCorrected(t *testing.T) {
+	t.Parallel()
+
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
+
+	// Simulate what happens when an LLM agent double-escapes backslashes:
+	// intended regex is Accept: \*/\* but the agent sends Accept: \\*/\\*
+	doubleEscaped := `Accept: \\*/\\*`
+	expected := `Accept: \*/\*`
+
+	addResult := CallMCPToolJSONOK[protocol.RuleEntry](t, mcpClient, "proxy_rule_add", map[string]interface{}{
+		"type":     RuleTypeRequestHeader,
+		"label":    "double-escape-fix",
+		"match":    doubleEscaped,
+		"replace":  "Accept: application/json",
+		"is_regex": true,
+	})
+	assert.Equal(t, expected, addResult.Match)
+
+	listResult := CallMCPToolJSONOK[protocol.RuleListResponse](t, mcpClient, "proxy_rule_list", nil)
+	var found bool
+	for _, r := range listResult.Rules {
+		if r.RuleID == addResult.RuleID {
+			found = true
+			assert.Equal(t, expected, r.Match)
+			break
+		}
+	}
+	assert.True(t, found)
+}
+
+func TestMCP_ProxyRuleRegexSingleEscapePreserved(t *testing.T) {
+	t.Parallel()
+
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
+
+	// Correctly escaped regex should pass through unchanged
+	match := `Accept: \*/\*`
+
+	addResult := CallMCPToolJSONOK[protocol.RuleEntry](t, mcpClient, "proxy_rule_add", map[string]interface{}{
+		"type":     RuleTypeRequestHeader,
+		"label":    "single-escape-ok",
+		"match":    match,
+		"replace":  "Accept: application/json",
+		"is_regex": true,
+	})
+	assert.Equal(t, match, addResult.Match)
+
+	rawText := CallMCPToolTextOK(t, mcpClient, "proxy_rule_list", nil)
+	assert.Contains(t, rawText, `\\*/\\*`)
+	assert.NotContains(t, rawText, `\\\\*/\\\\*`)
+}
+
+func TestMCP_ProxyRuleNonRegexBackslashPreserved(t *testing.T) {
+	t.Parallel()
+
+	_, mcpClient, _, _, _ := setupMockMCPServer(t)
+
+	// Non-regex rules should NOT have double-escape correction applied
+	match := `Accept: \\*/\\*`
+
+	addResult := CallMCPToolJSONOK[protocol.RuleEntry](t, mcpClient, "proxy_rule_add", map[string]interface{}{
+		"type":    RuleTypeRequestHeader,
+		"label":   "literal-backslash",
+		"match":   match,
+		"replace": "Accept: application/json",
+	})
+	assert.Equal(t, match, addResult.Match)
+}
+
 func TestMCP_ProxyPollDomainScoping(t *testing.T) {
 	t.Parallel()
 

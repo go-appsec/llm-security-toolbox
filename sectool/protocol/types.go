@@ -423,16 +423,9 @@ type FindReflectedResponse struct {
 
 // Reflection represents a request parameter value found in the response.
 type Reflection struct {
-	Name      string              `json:"name"`
-	Source    string              `json:"source"`
-	Value     string              `json:"value"`
-	Locations []string            `json:"locations"`
-	Contexts  []ReflectionContext `json:"contexts,omitempty"`
-}
-
-// ReflectionContext describes where and how a reflected value appears.
-type ReflectionContext struct {
-	Context  string `json:"context"`          // html_text, html_attribute, script, json, url, css, html_comment
-	Encoding string `json:"encoding"`         // raw, html_entity, url_query, url_path, js_unicode, js_hex, html_decimal, html_hex
-	Sample   string `json:"sample,omitempty"` // ~80 chars around match
+	Name         string   `json:"name"`
+	Source       string   `json:"source"`
+	Value        string   `json:"value"`
+	Locations    []string `json:"locations"`
+	RawReflected bool     `json:"raw_reflected,omitempty"` // value has special chars and appears unencoded
 }

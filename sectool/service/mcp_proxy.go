@@ -598,6 +598,11 @@ func (m *mcpServer) handleProxyRuleAdd(ctx context.Context, req mcp.CallToolRequ
 	label := req.GetString("label", "")
 
 	isRegex := req.GetBool("is_regex", false)
+	if isRegex {
+		if fixed := unDoubleEscapeRegex(match); fixed != match {
+			match = fixed
+		}
+	}
 	rule, err := m.service.httpBackend.AddRule(ctx, ProxyRuleInput{
 		Label:   label,
 		Type:    ruleType,
@@ -638,6 +643,12 @@ func (m *mcpServer) handleProxyRuleUpdate(ctx context.Context, req mcp.CallToolR
 		if _, ok := args["is_regex"]; ok {
 			v := req.GetBool("is_regex", false)
 			isRegex = &v
+		}
+	}
+
+	if isRegex != nil && *isRegex {
+		if fixed := unDoubleEscapeRegex(match); fixed != match {
+			match = fixed
 		}
 	}
 
@@ -973,4 +984,26 @@ func validateRuleTypeAny(t string) error {
 		return fmt.Errorf("invalid rule type %q", t)
 	}
 	return nil
+}
+
+// unDoubleEscapeRegex collapses double-escaped regex metacharacters (\\X → \X).
+// LLM agents sometimes produce double-escaped patterns (e.g. \\* instead of \*)
+// due to extra JSON encoding of backslashes in tool call arguments.
+func unDoubleEscapeRegex(s string) string {
+	if !strings.Contains(s, `\\`) {
+		return s
+	}
+	const metachars = `.*+?()[]{}^$|/`
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if i+2 < len(s) && s[i] == '\\' && s[i+1] == '\\' && strings.IndexByte(metachars, s[i+2]) >= 0 {
+			b.WriteByte('\\')
+			b.WriteByte(s[i+2])
+			i += 2
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }

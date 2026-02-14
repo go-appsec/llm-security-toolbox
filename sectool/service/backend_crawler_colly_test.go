@@ -411,7 +411,7 @@ func TestCollyBackend_ListFlows_search_cursor_not_past_results(t *testing.T) {
 	sess.mu.RLock()
 	cursor := sess.lastReturnedIdx
 	sess.mu.RUnlock()
-	assert.Equal(t, 2, cursor, "cursor should be at index 2 (after flow-1), not at the end")
+	assert.Equal(t, 2, cursor)
 
 	// since=last without search: should return flow-2 and flow-3
 	got, err = b.ListFlows(ctx, sessionID, CrawlListOptions{Since: sinceLast})

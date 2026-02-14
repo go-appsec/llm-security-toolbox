@@ -84,14 +84,12 @@ func TestHandleFindReflected(t *testing.T) {
 			"flow_id": listResp.Flows[0].FlowID,
 		})
 
-		// q should be reflected in body (HTML-encoded match)
+		// q should be reflected in body (HTML-encoded match) — not raw since it's encoded
 		qRef := findReflectionByName(resp.Reflections, "q")
 		require.NotNil(t, qRef)
 		assert.Equal(t, "query", qRef.Source)
-		assert.Contains(t, qRef.Locations, "body")
-		require.NotEmpty(t, qRef.Contexts)
-		assert.Equal(t, "html_text", qRef.Contexts[0].Context)
-		assert.Equal(t, "html_entity", qRef.Contexts[0].Encoding)
+		assert.Contains(t, qRef.Locations, "body:html_text")
+		assert.False(t, qRef.RawReflected)
 
 		// redirect should be reflected in Location header
 		redirectRef := findReflectionByName(resp.Reflections, "redirect")
@@ -127,7 +125,7 @@ func TestHandleFindReflected(t *testing.T) {
 		require.NotNil(t, emailRef)
 		assert.Equal(t, "json", emailRef.Source)
 		assert.Equal(t, "test@example.com", emailRef.Value)
-		assert.Contains(t, emailRef.Locations, "body")
+		assert.Contains(t, emailRef.Locations, "body:html_text")
 
 		roleRef := findReflectionByName(resp.Reflections, "user.role")
 		require.NotNil(t, roleRef)
@@ -138,7 +136,7 @@ func TestHandleFindReflected(t *testing.T) {
 		require.NotNil(t, idRef)
 		assert.Equal(t, "json", idRef.Source)
 		assert.Equal(t, "12345", idRef.Value)
-		assert.Contains(t, idRef.Locations, "body")
+		assert.Contains(t, idRef.Locations, "body:html_text")
 
 		tag0Ref := findReflectionByName(resp.Reflections, "tags[0]")
 		require.NotNil(t, tag0Ref)
@@ -168,7 +166,7 @@ func TestHandleFindReflected(t *testing.T) {
 		require.NotNil(t, usernameRef)
 		assert.Equal(t, "body", usernameRef.Source)
 		assert.Equal(t, "admin@example.com", usernameRef.Value)
-		assert.Contains(t, usernameRef.Locations, "body")
+		assert.Contains(t, usernameRef.Locations, "body:html_text")
 
 		// password is 12 chars but not in response
 		assert.Nil(t, findReflectionByName(resp.Reflections, "password"))
@@ -182,9 +180,10 @@ func TestHandleFindReflected(t *testing.T) {
 		callbackRef := findReflectionByName(resp.Reflections, "callback")
 		require.NotNil(t, callbackRef)
 		assert.Equal(t, "query", callbackRef.Source)
-		assert.Contains(t, callbackRef.Locations, "body")
-		require.NotEmpty(t, callbackRef.Contexts)
-		assert.Equal(t, "js_unicode", callbackRef.Contexts[0].Encoding)
+		// Content-Type is application/javascript, so context is script
+		assert.Contains(t, callbackRef.Locations, "body:script")
+		// Value has <> but only encoded variant matched, not raw
+		assert.False(t, callbackRef.RawReflected)
 	})
 
 	t.Run("missing_flow_id", func(t *testing.T) {
@@ -341,6 +340,41 @@ func TestExtractParams(t *testing.T) {
 			assert.NotEqual(t, "json", p.Source)
 		}
 	})
+
+	t.Run("h2_lowercase_headers", func(t *testing.T) {
+		// H2 headers are lowercase; standard headers should be skipped, custom headers extracted
+		raw := []byte("GET / HTTP/1.1\r\nhost: example.com\r\ncookie: sess=abc123\r\nreferer: https://evil.com\r\nx-custom: test-value\r\n\r\n")
+		params := extractParams(raw)
+
+		paramMap := make(map[string]protocol.Reflection)
+		for _, p := range params {
+			paramMap[p.Source+":"+p.Name] = p
+		}
+
+		assert.Equal(t, "abc123", paramMap["cookie:sess"].Value)
+		assert.Equal(t, "test-value", paramMap["header:X-Custom"].Value)
+
+		// host should be skipped (standard header)
+		for _, p := range params {
+			if p.Source == "header" {
+				assert.NotEqual(t, "example.com", p.Value)
+			}
+		}
+	})
+
+	t.Run("h2_multiple_cookie_headers", func(t *testing.T) {
+		// H2 may split cookies across multiple headers
+		raw := []byte("GET / HTTP/1.1\r\nhost: example.com\r\ncookie: session=abc123\r\ncookie: theme=dark-mode\r\n\r\n")
+		params := extractParams(raw)
+
+		paramMap := make(map[string]protocol.Reflection)
+		for _, p := range params {
+			paramMap[p.Source+":"+p.Name] = p
+		}
+
+		assert.Equal(t, "abc123", paramMap["cookie:session"].Value)
+		assert.Equal(t, "dark-mode", paramMap["cookie:theme"].Value)
+	})
 }
 
 func TestFindReflections(t *testing.T) {
@@ -353,10 +387,7 @@ func TestFindReflections(t *testing.T) {
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
 		assert.Equal(t, "q", reflections[0].Name)
-		assert.Contains(t, reflections[0].Locations, "body")
-		require.NotEmpty(t, reflections[0].Contexts)
-		assert.Equal(t, "raw", reflections[0].Contexts[0].Encoding)
-		assert.Equal(t, "html_text", reflections[0].Contexts[0].Context)
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("html_encoded_match", func(t *testing.T) {
@@ -366,9 +397,8 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
-		require.NotEmpty(t, reflections[0].Contexts)
-		assert.Equal(t, "html_entity", reflections[0].Contexts[0].Encoding)
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
+		assert.False(t, reflections[0].RawReflected)
 	})
 
 	t.Run("url_encoded_match", func(t *testing.T) {
@@ -377,7 +407,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("js_unicode_match", func(t *testing.T) {
@@ -386,9 +416,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
-		require.NotEmpty(t, reflections[0].Contexts)
-		assert.Equal(t, "js_unicode", reflections[0].Contexts[0].Encoding)
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("js_unicode_uppercase_match", func(t *testing.T) {
@@ -397,7 +425,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("js_hex_escape_match", func(t *testing.T) {
@@ -406,7 +434,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("html_decimal_entity_match", func(t *testing.T) {
@@ -415,7 +443,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("html_hex_entity_match", func(t *testing.T) {
@@ -424,7 +452,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 	})
 
 	t.Run("header_reflection", func(t *testing.T) {
@@ -452,7 +480,7 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
 		assert.Contains(t, reflections[0].Locations, "header:X-Echo")
 	})
 
@@ -465,15 +493,9 @@ func TestFindReflections(t *testing.T) {
 
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
-		assert.Contains(t, reflections[0].Locations, "body")
-		require.GreaterOrEqual(t, len(reflections[0].Contexts), 2)
-
-		encodings := make(map[string]bool)
-		for _, c := range reflections[0].Contexts {
-			encodings[c.Encoding] = true
-		}
-		assert.True(t, encodings["raw"])
-		assert.True(t, encodings["html_entity"])
+		assert.Contains(t, reflections[0].Locations, "body:script")
+		assert.Contains(t, reflections[0].Locations, "body:html_text")
+		assert.True(t, reflections[0].RawReflected)
 	})
 
 	t.Run("short_values_skipped", func(t *testing.T) {
@@ -487,6 +509,44 @@ func TestFindReflections(t *testing.T) {
 		reflections := findReflections(params, resp)
 		require.Len(t, reflections, 1)
 		assert.Equal(t, "c", reflections[0].Name)
+	})
+
+	t.Run("raw_reflected_xss", func(t *testing.T) {
+		params := []protocol.Reflection{{Name: "q", Source: "query", Value: "<script>alert(1)</script>"}}
+		resp := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" +
+			"<p><script>alert(1)</script></p>")
+
+		reflections := findReflections(params, resp)
+		require.Len(t, reflections, 1)
+		assert.True(t, reflections[0].RawReflected)
+	})
+
+	t.Run("raw_no_special_chars", func(t *testing.T) {
+		// Value without special chars: RawReflected should be false even with raw match
+		params := []protocol.Reflection{{Name: "q", Source: "query", Value: "admin"}}
+		resp := []byte("HTTP/1.1 200 OK\r\n\r\nWelcome admin")
+
+		reflections := findReflections(params, resp)
+		require.Len(t, reflections, 1)
+		assert.False(t, reflections[0].RawReflected)
+	})
+
+	t.Run("js_content_type_context", func(t *testing.T) {
+		params := []protocol.Reflection{{Name: "cb", Source: "query", Value: "myCallback"}}
+		resp := []byte("HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\n\r\nmyCallback({\"data\":1})")
+
+		reflections := findReflections(params, resp)
+		require.Len(t, reflections, 1)
+		assert.Contains(t, reflections[0].Locations, "body:script")
+	})
+
+	t.Run("json_content_type_context", func(t *testing.T) {
+		params := []protocol.Reflection{{Name: "q", Source: "query", Value: "injected"}}
+		resp := []byte("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"result\":\"injected\"}")
+
+		reflections := findReflections(params, resp)
+		require.Len(t, reflections, 1)
+		assert.Contains(t, reflections[0].Locations, "body:json")
 	})
 
 	t.Run("no_match", func(t *testing.T) {
@@ -628,6 +688,34 @@ func TestEncodingVariants(t *testing.T) {
 		assert.Equal(t, "raw", variants[0].encoding)
 		assert.Equal(t, "test<value>", variants[0].encoded)
 	})
+}
+
+func TestInferBaseContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ct   string
+		want string
+	}{
+		{"javascript", "application/javascript", "script"},
+		{"text_javascript", "text/javascript; charset=utf-8", "script"},
+		{"json", "application/json", "json"},
+		{"json_api", "application/vnd.api+json", "json"},
+		{"css", "text/css", "css"},
+		{"html", "text/html", ""},
+		{"empty", "", ""},
+		{"xml", "application/xml", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			headers := map[string][]string{}
+			if tt.ct != "" {
+				headers["Content-Type"] = []string{tt.ct}
+			}
+			assert.Equal(t, tt.want, inferBaseContext(headers))
+		})
+	}
 }
 
 func findReflectionByName(reflections []protocol.Reflection, name string) *protocol.Reflection {

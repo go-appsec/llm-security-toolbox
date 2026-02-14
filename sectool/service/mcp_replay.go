@@ -33,7 +33,8 @@ JSON paths: dot notation with array brackets (e.g., "user.email", "items[0].id",
 set_json object: {"user.email": "x", "items[0].id": 5}
 Types auto-parsed: null/true/false/numbers/{}/[], else string.
 Processing: remove_* then set_*. Content-Length/Host auto-updated.
-Validation: fix issues or use force=true for protocol testing.`),
+Validation: fix issues or use force=true for protocol testing.
+Replayed requests appear in proxy_poll history alongside captured traffic.`),
 		mcp.WithString("flow_id", mcp.Required(), mcp.Description("Flow ID from proxy_poll or crawl_poll to use as base request")),
 		mcp.WithString("method", mcp.Description("Override HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)")),
 		mcp.WithString("body", mcp.Description("Request body content (replaces existing body)")),
@@ -66,7 +67,8 @@ func (m *mcpServer) requestSendTool() mcp.Tool {
 		mcp.WithDescription(`Send a request from scratch (no captured flow required).
 
 Use this when you need to send a request to a URL without first capturing it via proxy.
-Returns: replay_id, status, headers, response_preview. Full body via replay_get.`),
+Returns: replay_id, status, headers, response_preview. Full body via replay_get.
+Sent requests appear in proxy_poll history alongside captured traffic.`),
 		mcp.WithString("url", mcp.Required(), mcp.Description("Target URL (e.g., 'https://api.example.com/users')")),
 		mcp.WithString("method", mcp.Description("HTTP method (default: GET)")),
 		mcp.WithObject("headers", mcp.Description("Headers as object: {\"Name\": \"Value\"}")),

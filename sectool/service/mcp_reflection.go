@@ -24,37 +24,37 @@ import (
 const minReflectionValueLen = 4
 
 // Standard headers unlikely to represent user-controlled reflection vectors.
-// Uses canonical form since parseHeadersToMap canonicalizes via http.CanonicalHeaderKey.
+// Uses lowercase keys for case-insensitive lookup (matches H2 lowercase headers directly).
 var skipReflectionHeader = map[string]bool{
-	"Host":                true,
-	"Content-Type":        true,
-	"Content-Length":      true,
-	"Cookie":              true,
-	"Accept":              true,
-	"Accept-Encoding":     true,
-	"Accept-Language":     true,
-	"Connection":          true,
-	"Cache-Control":       true,
-	"Pragma":              true,
-	"Upgrade":             true,
-	"Te":                  true,
-	"Sec-Fetch-Dest":      true,
-	"Sec-Fetch-Mode":      true,
-	"Sec-Fetch-Site":      true,
-	"Sec-Fetch-User":      true,
-	"Sec-Ch-Ua":           true,
-	"Sec-Ch-Ua-Mobile":    true,
-	"Sec-Ch-Ua-Platform":  true,
-	"Authorization":       true,
-	"Proxy-Authorization": true,
-	"If-Modified-Since":   true,
-	"If-None-Match":       true,
-	"If-Match":            true,
-	"If-Unmodified-Since": true,
-	"If-Range":            true,
-	"Range":               true,
-	"Expect":              true,
-	"Dnt":                 true,
+	"host":                true,
+	"content-type":        true,
+	"content-length":      true,
+	"cookie":              true,
+	"accept":              true,
+	"accept-encoding":     true,
+	"accept-language":     true,
+	"connection":          true,
+	"cache-control":       true,
+	"pragma":              true,
+	"upgrade":             true,
+	"te":                  true,
+	"sec-fetch-dest":      true,
+	"sec-fetch-mode":      true,
+	"sec-fetch-site":      true,
+	"sec-fetch-user":      true,
+	"sec-ch-ua":           true,
+	"sec-ch-ua-mobile":    true,
+	"sec-ch-ua-platform":  true,
+	"authorization":       true,
+	"proxy-authorization": true,
+	"if-modified-since":   true,
+	"if-none-match":       true,
+	"if-match":            true,
+	"if-unmodified-since": true,
+	"if-range":            true,
+	"range":               true,
+	"expect":              true,
+	"dnt":                 true,
 }
 
 func (m *mcpServer) addReflectionTools() {
@@ -67,7 +67,9 @@ func (m *mcpServer) findReflectedTool() mcp.Tool {
 
 Extracts parameters from the request (query string, form body, JSON body, multipart, cookies, headers) and searches the response for each value across multiple encoding variants. Compressed payloads are decompressed before extraction and searching.
 
-Returns only parameters with at least one reflection. Skips values shorter than 4 characters.`),
+Returns only parameters with at least one reflection. Skips values shorter than 4 characters.
+
+Locations indicate where: body:<context> (html_text, html_attribute, url, script, css, html_comment, json) or header:<name>. The raw_reflected flag signals special characters appeared unencoded (no sanitization).`),
 		mcp.WithString("flow_id", mcp.Required(), mcp.Description("Flow ID (from proxy_poll, replay_send, or crawl_poll)")),
 	)
 }
@@ -117,6 +119,8 @@ func extractParams(rawReq []byte) []protocol.Reflection {
 	var params []protocol.Reflection
 	reqHeaders, reqBody := splitHeadersBody(rawReq)
 	headerStr := string(reqHeaders)
+	headerMap := parseHeadersToMap(headerStr)
+
 	// Extract request URI from the first line (e.g. "GET /path?q=1 HTTP/1.1")
 	var fullPath string
 	if firstLine, _, _ := strings.Cut(headerStr, "\r\n"); firstLine != "" {
@@ -138,7 +142,10 @@ func extractParams(rawReq []byte) []protocol.Reflection {
 	// Body params based on content type
 	if len(reqBody) > 0 {
 		body, _ := decompressForDisplay(reqBody, headerStr)
-		contentType := extractHeader(headerStr, "Content-Type")
+		var contentType string
+		if ct := headerMap["Content-Type"]; len(ct) > 0 {
+			contentType = ct[0]
+		}
 		mediaType, mediaParams, _ := mime.ParseMediaType(contentType)
 
 		switch {
@@ -187,8 +194,8 @@ func extractParams(rawReq []byte) []protocol.Reflection {
 		}
 	}
 
-	// Cookie values
-	if cookieHeader := extractHeader(headerStr, "Cookie"); cookieHeader != "" {
+	// Cookie values (iterates all Cookie headers; H2 may split across multiple)
+	for _, cookieHeader := range headerMap["Cookie"] {
 		for _, pair := range strings.Split(cookieHeader, ";") {
 			if name, value, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
 				params = append(params, protocol.Reflection{
@@ -200,8 +207,8 @@ func extractParams(rawReq []byte) []protocol.Reflection {
 		}
 	}
 
-	for name, vals := range parseHeadersToMap(headerStr) {
-		if skipReflectionHeader[name] {
+	for name, vals := range headerMap {
+		if skipReflectionHeader[strings.ToLower(name)] {
 			continue
 		}
 		for _, v := range vals {
@@ -274,6 +281,9 @@ func findReflections(params []protocol.Reflection, rawResp []byte) []protocol.Re
 	respBodyStr := string(respBody)
 	respHeaderMap := parseHeadersToMap(string(respHeaders))
 
+	// Content-Type-based default context for non-HTML responses
+	baseContext := inferBaseContext(respHeaderMap)
+
 	var reflections []protocol.Reflection
 	for _, p := range params {
 		if len(p.Value) < minReflectionValueLen {
@@ -283,21 +293,24 @@ func findReflections(params []protocol.Reflection, rawResp []byte) []protocol.Re
 		variants := encodingVariants(p.Value)
 
 		var locations []string
-		var contexts []protocol.ReflectionContext
+		var rawBodyMatch bool // at least one raw (unencoded) body match
 
+		seen := make(map[string]bool)
 		for _, v := range variants {
 			idx := strings.Index(respBodyStr, v.encoded)
 			if idx >= 0 {
-				if len(contexts) == 0 {
-					locations = append(locations, "body")
+				ctx := baseContext
+				if ctx == "" {
+					ctx = classifyReflectionContext(respBodyStr, idx)
 				}
-				ctx := classifyReflectionContext(respBodyStr, idx)
-				sample := extractSample(respBodyStr, idx, idx+len(v.encoded))
-				contexts = append(contexts, protocol.ReflectionContext{
-					Context:  ctx,
-					Encoding: v.encoding,
-					Sample:   sample,
-				})
+				loc := "body:" + ctx
+				if !seen[loc] {
+					seen[loc] = true
+					locations = append(locations, loc)
+				}
+				if v.encoding == "raw" {
+					rawBodyMatch = true
+				}
 			}
 		}
 
@@ -313,7 +326,7 @@ func findReflections(params []protocol.Reflection, rawResp []byte) []protocol.Re
 		if len(locations) > 0 {
 			sort.Strings(locations)
 			p.Locations = locations
-			p.Contexts = contexts
+			p.RawReflected = rawBodyMatch && strings.ContainsAny(p.Value, `<>&'"`)
 			reflections = append(reflections, p)
 		}
 	}
@@ -326,6 +339,30 @@ func findReflections(params []protocol.Reflection, rawResp []byte) []protocol.Re
 	})
 
 	return reflections
+}
+
+// inferBaseContext determines the default context from the response Content-Type.
+// Returns empty string for HTML (requiring structural analysis) or unknown types.
+func inferBaseContext(respHeaderMap map[string][]string) string {
+	ct := ""
+	if vals := respHeaderMap["Content-Type"]; len(vals) > 0 {
+		ct = vals[0]
+	}
+	if ct == "" {
+		return ""
+	}
+	mediaType, _, _ := mime.ParseMediaType(ct)
+	switch {
+	case mediaType == "application/javascript" || mediaType == "text/javascript" ||
+		mediaType == "application/x-javascript":
+		return "script"
+	case mediaType == "application/json" || strings.HasSuffix(mediaType, "+json"):
+		return "json"
+	case mediaType == "text/css":
+		return "css"
+	default:
+		return ""
+	}
 }
 
 // classifyReflectionContext determines the HTML/JS/CSS context at a match position.
@@ -383,27 +420,4 @@ func classifyReflectionContext(body string, matchStart int) string {
 	}
 
 	return "html_text"
-}
-
-// extractSample returns ~80 chars around the match for context display.
-func extractSample(body string, matchStart, matchEnd int) string {
-	const pad = 40
-	start := matchStart - pad
-	if start < 0 {
-		start = 0
-	}
-	end := matchEnd + pad
-	if end > len(body) {
-		end = len(body)
-	}
-
-	var b strings.Builder
-	if start > 0 {
-		b.WriteString("...")
-	}
-	b.WriteString(body[start:end])
-	if end < len(body) {
-		b.WriteString("...")
-	}
-	return b.String()
 }
