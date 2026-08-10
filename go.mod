@@ -14,7 +14,7 @@ require (
 	github.com/klauspost/compress v1.19.1
 	github.com/mark3labs/mcp-go v0.57.0
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/tdewolff/parse/v2 v2.8.14
