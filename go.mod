@@ -16,7 +16,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/pflag v1.0.10
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	golang.org/x/net v0.58.0
@@ -44,6 +44,7 @@ require (
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
