@@ -13,6 +13,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/mark3labs/mcp-go/server/servertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -330,7 +331,7 @@ func NewTestMCPServer(t *testing.T) *TestMCPServer {
 		},
 	)
 
-	httpServer := mcpserver.NewTestServer(mcpServer)
+	httpServer := servertest.NewTestServer(mcpServer)
 
 	ts.HTTPServer = httpServer
 	ts.MCPServer = mcpServer

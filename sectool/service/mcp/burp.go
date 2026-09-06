@@ -217,7 +217,8 @@ func (c *BurpClient) doHealthCheck(ctx context.Context) func() {
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
-	err := c.mcpClient.Ping(pingCtx)
+	// Deprecated for modern protocol only; legacy negotiation still round-trips
+	err := c.mcpClient.Ping(pingCtx) //nolint:staticcheck // SA1019
 	cancel()
 
 	if err != nil {
